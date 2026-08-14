@@ -1,50 +1,51 @@
 blueprint:
   domain: automation
-  name: Voice - Volume Unit Conversion - Local Assist
+  name: Voice - Unit Conversion - Local Assist
   author: Jeremie Weldin
   description: >-
-    Ask Assist to convert common volume units fully locally — no cloud
-
-    service or LLM required.
+    Ask Assist to convert between units fully locally — no cloud service
+    or LLM required. Covers volume, weight/mass, length/distance,
+    temperature, area, speed, digital storage, and time.
 
 
     ### Usage
 
     - how many ounces are in 2 cups
 
-    - how many cups in 1 gallon
+    - convert 3 pounds to grams
 
-    - convert 3 tablespoons to teaspoons
+    - what is 100 celsius in fahrenheit
 
-    - what is 16 ounces in cups
+    - how many kilometers in 5 miles
+
+    - convert 2 square meters to square feet
+
+
+    ### How it works
+
+    Every unit is defined with a dimension (volume, weight, length, …), a
+    factor, and an optional offset. A value is converted into its
+    dimension's base unit with `base = amount * factor + offset`, then out
+    to the target with `result = (base - offset) / factor`. The offset is
+    what lets temperature (an affine scale, not a simple ratio) share the
+    exact same engine as everything else. Conversions between different
+    dimensions (e.g. cups to pounds) are rejected with a clear message.
 
 
     ### Customizing
 
-    Both the unit-name map and the conversion factors are editable
-
-    inputs below, so you can add units, add phrasing/synonyms, rename
-
-    them for another language, or swap to a different measurement
-
-    system entirely — the automation just converts everything through
-
-    a common base unit (milliliters by default), so any consistent set
-
-    of factors will work.
+    Both the synonym map and the unit definitions are editable inputs, so
+    you can add units, add phrasing/synonyms, rename them for another
+    language, or add whole new dimensions — just give the new units a
+    shared dimension name and factors expressed in a consistent base unit.
 
 
     ### Limitations
 
-    The {from_unit}/{to_unit} slots capture whatever words were said,
-
-    same free-text pattern Home Assistant uses for things like custom
-
-    timer labels. Anything not present in the unit map gets a graceful
-
-    fallback response instead of a silent failure — check the unit map
-
-    input if a conversion you expect isn't being recognized.
+    Amounts are whole numbers, 0–100000 (no decimals or negatives, so
+    sub-zero temperatures can't be entered). The {from_unit}/{to_unit}
+    slots capture whatever words were said; anything not in the synonym
+    map gets a graceful fallback instead of a silent failure.
   input:
     trigger:
       name: Trigger sentences
@@ -65,26 +66,23 @@ blueprint:
     unit_map:
       name: Unit name synonyms
       description: >-
-        Maps every spoken word or phrase for a unit to a canonical key
-        used by the conversion factors below. Add entries here to
-        support more phrasing or another language — every key on the
-        right must have a matching entry in the conversion factors
-        input.
+        Maps every spoken word or phrase for a unit to a canonical key in
+        the unit definitions below. Add entries here to support more
+        phrasing or another language — every value on the right must have
+        a matching key in the unit definitions input.
       selector:
         object:
       default:
+        # --- volume ---
         tsp: tsp
         teaspoon: tsp
         teaspoons: tsp
         tbsp: tbsp
         tablespoon: tbsp
         tablespoons: tbsp
-        oz: oz
-        ounce: oz
-        ounces: oz
-        fl oz: oz
-        fluid ounce: oz
-        fluid ounces: oz
+        fl oz: floz
+        fluid ounce: floz
+        fluid ounces: floz
         cup: cup
         cups: cup
         pint: pint
@@ -99,36 +97,200 @@ blueprint:
         l: l
         liter: l
         liters: l
-    ml_per_unit:
-      name: Conversion factors (base unit per 1 of each unit)
+        litre: l
+        litres: l
+        # --- weight / mass ---
+        mg: mg
+        milligram: mg
+        milligrams: mg
+        g: g
+        gram: g
+        grams: g
+        kg: kg
+        kilo: kg
+        kilos: kg
+        kilogram: kg
+        kilograms: kg
+        oz: oz
+        ounce: oz
+        ounces: oz
+        lb: lb
+        lbs: lb
+        pound: lb
+        pounds: lb
+        stone: stone
+        stones: stone
+        ton: tonne
+        tons: tonne
+        tonne: tonne
+        tonnes: tonne
+        metric ton: tonne
+        # --- length / distance ---
+        mm: mm
+        millimeter: mm
+        millimeters: mm
+        cm: cm
+        centimeter: cm
+        centimeters: cm
+        m: m
+        meter: m
+        meters: m
+        metre: m
+        metres: m
+        km: km
+        kilometer: km
+        kilometers: km
+        kilometre: km
+        kilometres: km
+        inch: inch
+        inches: inch
+        foot: foot
+        feet: foot
+        yard: yard
+        yards: yard
+        mile: mile
+        miles: mile
+        # --- temperature ---
+        celsius: celsius
+        centigrade: celsius
+        degrees celsius: celsius
+        fahrenheit: fahrenheit
+        degrees fahrenheit: fahrenheit
+        kelvin: kelvin
+        # --- area ---
+        square meter: sqm
+        square meters: sqm
+        square metre: sqm
+        square metres: sqm
+        square foot: sqft
+        square feet: sqft
+        square inch: sqin
+        square inches: sqin
+        square kilometer: sqkm
+        square kilometers: sqkm
+        square mile: sqmi
+        square miles: sqmi
+        acre: acre
+        acres: acre
+        hectare: hectare
+        hectares: hectare
+        # --- speed ---
+        meters per second: mps
+        meter per second: mps
+        miles per hour: mph
+        mph: mph
+        kilometers per hour: kph
+        kilometer per hour: kph
+        kph: kph
+        knot: knot
+        knots: knot
+        # --- digital storage ---
+        byte: byte
+        bytes: byte
+        kilobyte: kb
+        kilobytes: kb
+        megabyte: mb
+        megabytes: mb
+        gigabyte: gb
+        gigabytes: gb
+        terabyte: tb
+        terabytes: tb
+        # --- time ---
+        second: second
+        seconds: second
+        minute: minute
+        minutes: minute
+        hour: hour
+        hours: hour
+        day: day
+        days: day
+        week: week
+        weeks: week
+    unit_defs:
+      name: Unit definitions (dimension, factor, offset)
       description: >-
-        Every canonical unit key from the synonym map above needs a
-        matching entry here, expressed in a shared base unit
-        (milliliters by default). To switch base unit or measurement
-        system, change every value consistently.
+        Every canonical key from the synonym map needs an entry here.
+        `dimension` groups units that can convert to each other. `factor`
+        and optional `offset` express the unit in its dimension's base
+        unit via `base = amount * factor + offset`. Bases: volume=ml,
+        weight=gram, length=meter, temperature=celsius, area=square
+        meter, speed=meter/second, data=byte, time=second.
       selector:
         object:
       default:
-        tsp: 4.92892
-        tbsp: 14.7868
-        oz: 29.5735
-        cup: 236.588
-        pint: 473.176
-        quart: 946.353
-        gallon: 3785.41
-        ml: 1
-        l: 1000
+        # volume (base: milliliter)
+        tsp: {dimension: volume, factor: 4.92892}
+        tbsp: {dimension: volume, factor: 14.7868}
+        floz: {dimension: volume, factor: 29.5735}
+        cup: {dimension: volume, factor: 236.588}
+        pint: {dimension: volume, factor: 473.176}
+        quart: {dimension: volume, factor: 946.353}
+        gallon: {dimension: volume, factor: 3785.41}
+        ml: {dimension: volume, factor: 1}
+        l: {dimension: volume, factor: 1000}
+        # weight (base: gram)
+        mg: {dimension: weight, factor: 0.001}
+        g: {dimension: weight, factor: 1}
+        kg: {dimension: weight, factor: 1000}
+        oz: {dimension: weight, factor: 28.3495}
+        lb: {dimension: weight, factor: 453.592}
+        stone: {dimension: weight, factor: 6350.29}
+        tonne: {dimension: weight, factor: 1000000}
+        # length (base: meter)
+        mm: {dimension: length, factor: 0.001}
+        cm: {dimension: length, factor: 0.01}
+        m: {dimension: length, factor: 1}
+        km: {dimension: length, factor: 1000}
+        inch: {dimension: length, factor: 0.0254}
+        foot: {dimension: length, factor: 0.3048}
+        yard: {dimension: length, factor: 0.9144}
+        mile: {dimension: length, factor: 1609.34}
+        # temperature (base: celsius; affine, uses offset)
+        celsius: {dimension: temperature, factor: 1, offset: 0}
+        fahrenheit: {dimension: temperature, factor: 0.5555556, offset: -17.7777778}
+        kelvin: {dimension: temperature, factor: 1, offset: -273.15}
+        # area (base: square meter)
+        sqm: {dimension: area, factor: 1}
+        sqft: {dimension: area, factor: 0.092903}
+        sqin: {dimension: area, factor: 0.00064516}
+        sqkm: {dimension: area, factor: 1000000}
+        sqmi: {dimension: area, factor: 2589988.11}
+        acre: {dimension: area, factor: 4046.86}
+        hectare: {dimension: area, factor: 10000}
+        # speed (base: meter per second)
+        mps: {dimension: speed, factor: 1}
+        mph: {dimension: speed, factor: 0.44704}
+        kph: {dimension: speed, factor: 0.277778}
+        knot: {dimension: speed, factor: 0.514444}
+        # digital storage (base: byte, decimal SI)
+        byte: {dimension: data, factor: 1}
+        kb: {dimension: data, factor: 1000}
+        mb: {dimension: data, factor: 1000000}
+        gb: {dimension: data, factor: 1000000000}
+        tb: {dimension: data, factor: 1000000000000}
+        # time (base: second)
+        second: {dimension: time, factor: 1}
+        minute: {dimension: time, factor: 60}
+        hour: {dimension: time, factor: 3600}
+        day: {dimension: time, factor: 86400}
+        week: {dimension: time, factor: 604800}
     unknown_unit_response:
       name: Response when a unit isn't recognized
       description: >-
-        Static text only — this response can't reference the specific
-        words that weren't recognized, since Home Assistant doesn't
-        support rendering a template inside an already-rendered input
-        value.
+        Spoken back when one of the units said isn't in the synonym map.
       selector:
         text:
           multiline: false
       default: "Sorry, I don't recognize one of those units."
+    mismatch_response:
+      name: Response when the two units measure different things
+      description: >-
+        Spoken back when both units are known but belong to different
+        dimensions (for example converting cups to pounds).
+      selector:
+        text:
+          multiline: false
+      default: "Those units measure different things, so I can't convert between them."
 
 triggers:
   - trigger: conversation
@@ -136,8 +298,9 @@ triggers:
 
 variables:
   unit_map: !input unit_map
-  ml_per_unit: !input ml_per_unit
+  unit_defs: !input unit_defs
   unknown_unit_response: !input unknown_unit_response
+  mismatch_response: !input mismatch_response
 
 actions:
   - variables:
@@ -147,12 +310,19 @@ actions:
       from_key: "{{ unit_map.get(trigger.slots.from_unit | lower | trim) }}"
       to_key: "{{ unit_map.get(trigger.slots.to_unit | lower | trim) }}"
   - choose:
-      - conditions: "{{ from_key is none or to_key is none }}"
+      - conditions: >-
+          {{ from_key is none or to_key is none
+             or from_key not in unit_defs or to_key not in unit_defs }}
         sequence:
           - set_conversation_response: "{{ unknown_unit_response }}"
+      - conditions: "{{ unit_defs[from_key].dimension != unit_defs[to_key].dimension }}"
+        sequence:
+          - set_conversation_response: "{{ mismatch_response }}"
     default:
       - variables:
-          result: "{{ (amt * ml_per_unit[from_key] / ml_per_unit[to_key]) | round(2) }}"
+          base: "{{ amt * unit_defs[from_key].factor + (unit_defs[from_key].get('offset', 0)) }}"
+      - variables:
+          result: "{{ ((base | float - unit_defs[to_key].get('offset', 0)) / unit_defs[to_key].factor) | round(2) }}"
       - set_conversation_response: >-
           {{ amt | int if amt == (amt | int) else amt }} {{ from_raw }} is
           {{ result | int if result == (result | int) else result }} {{ to_raw }}.

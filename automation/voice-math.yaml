@@ -8,60 +8,63 @@ blueprint:
     or LLM required.
 
 
+    Handles both single operations ("what is 6 times 7") and chained
+    expressions with correct order of operations ("what is 5 plus 3
+    divided by 2 times 6" → 14). Numbers may be spoken as words ("five")
+    or digits ("5"), anywhere from 0 to 1,000,000.
+
+
     ### Usage
 
     Default trigger sentences (edit any set below to reword or
 
     translate):
 
-    - what is {num1} plus {num2}
+    - what is {num1} plus {rest}
 
-    - what is {num1} minus {num2}
+    - what is {num1} minus {rest}
 
-    - what is {num1} times {num2}
+    - what is {num1} times {rest}
 
-    - what is {num1} divided by {num2}
+    - what is {num1} divided by {rest}
 
 
-    Numbers are whole numbers only, matched via Assist's built-in
-    numeric
+    where {rest} is the remainder of the expression — one more number for
 
-    range slot — works whether your STT engine transcribes the number
+    a simple question, or a whole chain like "3 divided by 2 times 6".
 
-    as a digit ("5") or a word ("five").
+    Multiplication and division are evaluated before addition and
+
+    subtraction, then left to right, just like written arithmetic.
 
 
     ### Limitations
 
-    This blueprint matches two-number, single-operation sentences
+    Each sentence must begin with a number and an operator, which is what
 
-    only. Sentence-template matching is pattern matching, not a real
+    keeps this from hijacking unrelated questions ("what is the weather"
 
-    math parser — chained expressions like "5 plus 3 times 2" aren't
+    is left alone). There are no parentheses — precedence is fixed to the
 
-    supported and would need order-of-operations logic this approach
+    standard order of operations. Numbers are whole numbers only;
 
-    can't provide. If you need a specific chained pattern, add it as
-
-    its own dedicated sentence with its own computed response.
+    division results are rounded to two decimal places.
   input:
     plus_trigger:
       name: Addition trigger sentences
       description: >-
         Sentences that trigger addition. Keep {0..1000000:num1} and
-        {0..1000000:num2} — these are Assist's numeric-range slots and
-        must stay in this exact {min..max:name} form. Change the
-        surrounding words to reword or translate.
+        {rest} exactly as written — {0..1000000:num1} is Assist's
+        numeric-range slot and {rest} is a wildcard that captures the
+        remainder of the expression. Change only the surrounding words
+        and the operator words in the (plus|added to) group to reword or
+        translate.
       selector:
         text:
           multiline: false
           multiple: true
       default:
-        - "what is {0..1000000:num1} plus {0..1000000:num2}"
-        - "what's {0..1000000:num1} plus {0..1000000:num2}"
-        - "{0..1000000:num1} plus {0..1000000:num2}"
-        - "what is {0..1000000:num1} added to {0..1000000:num2}"
-        - "how much is {0..1000000:num1} plus {0..1000000:num2}"
+        - "[(what is|what's|whats|calculate|compute|how much is|work out) ]{0..1000000:num1} (plus|added to) {rest}"
     minus_trigger:
       name: Subtraction trigger sentences
       description: Same rules as the addition sentences above.
@@ -70,11 +73,7 @@ blueprint:
           multiline: false
           multiple: true
       default:
-        - "what is {0..1000000:num1} minus {0..1000000:num2}"
-        - "what's {0..1000000:num1} minus {0..1000000:num2}"
-        - "{0..1000000:num1} minus {0..1000000:num2}"
-        - "what is {0..1000000:num1} subtract {0..1000000:num2}"
-        - "how much is {0..1000000:num1} minus {0..1000000:num2}"
+        - "[(what is|what's|whats|calculate|compute|how much is|work out) ]{0..1000000:num1} (minus|subtract) {rest}"
     times_trigger:
       name: Multiplication trigger sentences
       description: Same rules as the addition sentences above.
@@ -83,11 +82,7 @@ blueprint:
           multiline: false
           multiple: true
       default:
-        - "what is {0..1000000:num1} times {0..1000000:num2}"
-        - "what's {0..1000000:num1} times {0..1000000:num2}"
-        - "{0..1000000:num1} times {0..1000000:num2}"
-        - "what is {0..1000000:num1} multiplied by {0..1000000:num2}"
-        - "how much is {0..1000000:num1} times {0..1000000:num2}"
+        - "[(what is|what's|whats|calculate|compute|how much is|work out) ]{0..1000000:num1} (times|multiplied by) {rest}"
     divide_trigger:
       name: Division trigger sentences
       description: Same rules as the addition sentences above.
@@ -96,17 +91,23 @@ blueprint:
           multiline: false
           multiple: true
       default:
-        - "what is {0..1000000:num1} divided by {0..1000000:num2}"
-        - "what's {0..1000000:num1} divided by {0..1000000:num2}"
-        - "{0..1000000:num1} divided by {0..1000000:num2}"
-        - "how much is {0..1000000:num1} divided by {0..1000000:num2}"
+        - "[(what is|what's|whats|calculate|compute|how much is|work out) ]{0..1000000:num1} (divided by|over) {rest}"
     divide_by_zero_response:
       name: Divide-by-zero response
-      description: Spoken back when someone asks to divide by zero.
+      description: Spoken back when an expression divides by zero.
       selector:
         text:
           multiline: false
       default: "You can't divide by zero."
+    error_response:
+      name: Unrecognized-expression response
+      description: >-
+        Spoken back when the words after the first operator don't form a
+        valid math expression (for example "what is 5 times better").
+      selector:
+        text:
+          multiline: false
+      default: "Sorry, I couldn't work that out."
 
 triggers:
   - id: plus
@@ -124,32 +125,98 @@ triggers:
 
 variables:
   divide_by_zero_response: !input divide_by_zero_response
+  error_response: !input error_response
 
 actions:
-  - variables:
-      n1: "{{ trigger.slots.num1 | int }}"
-      n2: "{{ trigger.slots.num2 | int }}"
-  - choose:
-      - conditions: "{{ trigger.id == 'plus' }}"
-        sequence:
-          - set_conversation_response: "{{ n1 }} plus {{ n2 }} is {{ n1 + n2 }}."
-      - conditions: "{{ trigger.id == 'minus' }}"
-        sequence:
-          - set_conversation_response: "{{ n1 }} minus {{ n2 }} is {{ n1 - n2 }}."
-      - conditions: "{{ trigger.id == 'times' }}"
-        sequence:
-          - set_conversation_response: "{{ n1 }} times {{ n2 }} is {{ n1 * n2 }}."
-      - conditions: "{{ trigger.id == 'divide' }}"
-        sequence:
-          - if:
-              - condition: template
-                value_template: "{{ n2 == 0 }}"
-            then:
-              - set_conversation_response: "{{ divide_by_zero_response }}"
-            else:
-              - set_conversation_response: >-
-                  {% set result = (n1 / n2) | round(2) %}
-                  {{ n1 }} divided by {{ n2 }} is {{ result | int if result == (result | int) else result }}.
+  - set_conversation_response: >-
+      {%- set op1 = {'plus':'+','minus':'-','times':'*','divide':'/'}[trigger.id] -%}
+      {%- set n1 = trigger.slots.num1 | int -%}
+      {%- set rest = trigger.slots.rest -%}
+      {%- set units = {'zero':0,'one':1,'two':2,'three':3,'four':4,'five':5,'six':6,'seven':7,'eight':8,'nine':9,'ten':10,'eleven':11,'twelve':12,'thirteen':13,'fourteen':14,'fifteen':15,'sixteen':16,'seventeen':17,'eighteen':18,'nineteen':19} -%}
+      {%- set tens = {'twenty':20,'thirty':30,'forty':40,'fifty':50,'sixty':60,'seventy':70,'eighty':80,'ninety':90} -%}
+      {%- set scales = {'thousand':1000,'million':1000000} -%}
+      {%- set opmap = {'plus':'+','add':'+','added':'+','minus':'-','subtract':'-','less':'-','times':'*','multiplied':'*','multiply':'*','divided':'/','divide':'/','over':'/'} -%}
+      {%- set opwords = {'+':'plus','-':'minus','*':'times','/':'divided by'} -%}
+      {%- set fillers = ['by','to','and'] -%}
+      {%- set toks = (rest | lower | replace('-', ' ') | replace(',', ' ')).split() -%}
+      {%- set ns = namespace(segs=[], ops=[op1], buf=[], err=false) -%}
+      {%- for tok in toks -%}
+        {%- if tok in opmap -%}
+          {%- set ns.segs = ns.segs + [ns.buf] -%}
+          {%- set ns.ops = ns.ops + [opmap[tok]] -%}
+          {%- set ns.buf = [] -%}
+        {%- elif tok in fillers -%}
+        {%- elif tok.isdigit() or tok in units or tok in tens or tok == 'hundred' or tok in scales -%}
+          {%- set ns.buf = ns.buf + [tok] -%}
+        {%- else -%}
+          {%- set ns.err = true -%}
+        {%- endif -%}
+      {%- endfor -%}
+      {%- set ns.segs = ns.segs + [ns.buf] -%}
+      {%- set nn = namespace(nums=[n1], err=ns.err) -%}
+      {%- for seg in ns.segs -%}
+        {%- set w2n = namespace(total=0, cur=0, any=false, ok=true) -%}
+        {%- for w in seg -%}
+          {%- if w.isdigit() -%}
+            {%- set w2n.cur = w2n.cur + (w | int) -%}{%- set w2n.any = true -%}
+          {%- elif w in units -%}
+            {%- set w2n.cur = w2n.cur + units[w] -%}{%- set w2n.any = true -%}
+          {%- elif w in tens -%}
+            {%- set w2n.cur = w2n.cur + tens[w] -%}{%- set w2n.any = true -%}
+          {%- elif w == 'hundred' -%}
+            {%- set w2n.cur = (w2n.cur if w2n.cur > 0 else 1) * 100 -%}{%- set w2n.any = true -%}
+          {%- elif w in scales -%}
+            {%- set w2n.total = w2n.total + (w2n.cur if w2n.cur > 0 else 1) * scales[w] -%}{%- set w2n.cur = 0 -%}{%- set w2n.any = true -%}
+          {%- else -%}
+            {%- set w2n.ok = false -%}
+          {%- endif -%}
+        {%- endfor -%}
+        {%- if not w2n.any or not w2n.ok -%}
+          {%- set nn.err = true -%}
+        {%- else -%}
+          {%- set nn.nums = nn.nums + [w2n.total + w2n.cur] -%}
+        {%- endif -%}
+      {%- endfor -%}
+      {%- if nn.err or (nn.nums | length) != (ns.ops | length) + 1 -%}
+      {{ error_response }}
+      {%- else -%}
+      {%- set p = namespace(vals=[nn.nums[0]], ops=[], divzero=false) -%}
+      {%- for i in range(ns.ops | length) -%}
+        {%- set op = ns.ops[i] -%}
+        {%- set n = nn.nums[i + 1] -%}
+        {%- if op == '*' -%}
+          {%- set p.vals = p.vals[:-1] + [p.vals[-1] * n] -%}
+        {%- elif op == '/' -%}
+          {%- if n == 0 -%}
+            {%- set p.divzero = true -%}
+          {%- else -%}
+            {%- set p.vals = p.vals[:-1] + [p.vals[-1] / n] -%}
+          {%- endif -%}
+        {%- else -%}
+          {%- set p.ops = p.ops + [op] -%}
+          {%- set p.vals = p.vals + [n] -%}
+        {%- endif -%}
+      {%- endfor -%}
+      {%- if p.divzero -%}
+      {{ divide_by_zero_response }}
+      {%- else -%}
+      {%- set r = namespace(acc=p.vals[0]) -%}
+      {%- for i in range(p.ops | length) -%}
+        {%- if p.ops[i] == '+' -%}
+          {%- set r.acc = r.acc + p.vals[i + 1] -%}
+        {%- else -%}
+          {%- set r.acc = r.acc - p.vals[i + 1] -%}
+        {%- endif -%}
+      {%- endfor -%}
+      {%- set rounded = r.acc | round(2) -%}
+      {%- set disp = rounded | int if rounded == (rounded | int) else rounded -%}
+      {%- set e = namespace(parts=[nn.nums[0] | string]) -%}
+      {%- for i in range(ns.ops | length) -%}
+        {%- set e.parts = e.parts + [opwords[ns.ops[i]], nn.nums[i + 1] | string] -%}
+      {%- endfor -%}
+      {{ e.parts | join(' ') }} is {{ disp }}.
+      {%- endif -%}
+      {%- endif -%}
 
 mode: parallel
 max: 5

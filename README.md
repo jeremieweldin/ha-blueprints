@@ -10,23 +10,31 @@ own Home Assistant instance.
 
 ### 🧮 Basic Arithmetic
 Addition, subtraction, multiplication, and division, spoken and answered
-locally — "what is 6 times 7", "20 divided by 4".
+locally — "what is 6 times 7", "20 divided by 4". Handles chained
+expressions with correct order of operations too — "what is 5 plus 3
+divided by 2 times 6" answers 14.
 
 [![Open your Home Assistant instance and show the blueprint import dialog with a specific blueprint pre-filled.](https://my.home-assistant.io/badges/blueprint_import.svg)](https://my.home-assistant.io/redirect/blueprint_import/?blueprint_url=https%3A%2F%2Fraw.githubusercontent.com%2Fjeremieweldin%2Fha-blueprints%2Fmain%2Fautomation%2Fvoice-math.yaml)
 
-Whole numbers, 0–1,000,000, two-number single-operation questions only —
-see the blueprint's own description for the full limitations note on why
-chained expressions ("5 plus 3 times 2") aren't supported.
+Whole numbers 0–1,000,000, spoken as words ("five") or digits ("5").
+Multiplication and division bind before addition and subtraction, then
+left to right; division results are rounded to two decimals. No
+parentheses. Each question must start with a number and an operator, so
+unrelated queries like "what is the weather" are left untouched.
 
-### 🥤 Volume Unit Conversion
-Convert between teaspoons, tablespoons, ounces, cups, pints, quarts,
-gallons, milliliters, and liters — "how many ounces are in 2 cups".
+### 🔁 Unit Conversion
+Convert across volume, weight/mass, length/distance, temperature, area,
+speed, digital storage, and time — "how many ounces are in 2 cups",
+"convert 3 pounds to grams", "what is 100 celsius in fahrenheit".
 
 [![Open your Home Assistant instance and show the blueprint import dialog with a specific blueprint pre-filled.](https://my.home-assistant.io/badges/blueprint_import.svg)](https://my.home-assistant.io/redirect/blueprint_import/?blueprint_url=https%3A%2F%2Fraw.githubusercontent.com%2Fjeremieweldin%2Fha-blueprints%2Fmain%2Fautomation%2Fvoice-unit-conversion.yaml)
 
-Unit names and conversion factors are both editable inputs, so you can add
-units, translate the synonym list, or swap to a different measurement
-system.
+Each unit is defined with a dimension, a factor, and an optional offset;
+values convert through a shared base unit per dimension, with the offset
+handling temperature's affine scale. Conversions between mismatched
+dimensions (like cups to pounds) are politely refused. Both the synonym
+map and the unit definitions are editable inputs, so you can add units,
+translate the synonyms, or add entirely new dimensions.
 
 ### 📅 Date & Time
 Natural spoken date and time, with US holiday detection — "what's the
@@ -76,6 +84,22 @@ an entire trigger list rather than just the one malformed sentence. If you
 customize any trigger sentence input, keep it to plain words, `[optional]`
 brackets, `(option one|option two)` alternatives, and `{0..100:name}`
 numeric ranges. Avoid embedding punctuation mid-word.
+
+## Tests
+
+The math and unit-conversion blueprints have automated tests under
+[`tests/`](tests/). They drive spoken sentences through
+[`hassil`](https://github.com/OHF-Voice/hassil) — the exact matcher Home
+Assistant's Assist uses — and render each blueprint's real Jinja response
+template (pulled straight from the YAML) through Home Assistant's sandboxed
+template environment, comparing the spoken answer against an independent
+reference implementation across thousands of cases.
+
+```bash
+python -m venv .venv && source .venv/bin/activate
+pip install -r tests/requirements.txt
+python -m pytest tests/ -q
+```
 
 ## License
 
