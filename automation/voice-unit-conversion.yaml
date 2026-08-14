@@ -1,0 +1,161 @@
+blueprint:
+  domain: automation
+  name: Voice - Volume Unit Conversion - Local Assist
+  author: Jeremie Weldin
+  description: >-
+    Ask Assist to convert common volume units fully locally — no cloud
+
+    service or LLM required.
+
+
+    ### Usage
+
+    - how many ounces are in 2 cups
+
+    - how many cups in 1 gallon
+
+    - convert 3 tablespoons to teaspoons
+
+    - what is 16 ounces in cups
+
+
+    ### Customizing
+
+    Both the unit-name map and the conversion factors are editable
+
+    inputs below, so you can add units, add phrasing/synonyms, rename
+
+    them for another language, or swap to a different measurement
+
+    system entirely — the automation just converts everything through
+
+    a common base unit (milliliters by default), so any consistent set
+
+    of factors will work.
+
+
+    ### Limitations
+
+    The {from_unit}/{to_unit} slots capture whatever words were said,
+
+    same free-text pattern Home Assistant uses for things like custom
+
+    timer labels. Anything not present in the unit map gets a graceful
+
+    fallback response instead of a silent failure — check the unit map
+
+    input if a conversion you expect isn't being recognized.
+  input:
+    trigger:
+      name: Trigger sentences
+      description: >-
+        Use {0..100000:amount} for the number (must stay in this exact
+        {min..max:name} form) and {from_unit}/{to_unit} for the
+        unit-name slots.
+      selector:
+        text:
+          multiline: false
+          multiple: true
+      default:
+        - "how many {to_unit} (are|is) in {0..100000:amount} {from_unit}"
+        - "how many {to_unit} in {0..100000:amount} {from_unit}"
+        - "convert {0..100000:amount} {from_unit} to {to_unit}"
+        - "what is {0..100000:amount} {from_unit} in {to_unit}"
+        - "what's {0..100000:amount} {from_unit} in {to_unit}"
+    unit_map:
+      name: Unit name synonyms
+      description: >-
+        Maps every spoken word or phrase for a unit to a canonical key
+        used by the conversion factors below. Add entries here to
+        support more phrasing or another language — every key on the
+        right must have a matching entry in the conversion factors
+        input.
+      selector:
+        object:
+      default:
+        tsp: tsp
+        teaspoon: tsp
+        teaspoons: tsp
+        tbsp: tbsp
+        tablespoon: tbsp
+        tablespoons: tbsp
+        oz: oz
+        ounce: oz
+        ounces: oz
+        fl oz: oz
+        fluid ounce: oz
+        fluid ounces: oz
+        cup: cup
+        cups: cup
+        pint: pint
+        pints: pint
+        quart: quart
+        quarts: quart
+        gallon: gallon
+        gallons: gallon
+        ml: ml
+        milliliter: ml
+        milliliters: ml
+        l: l
+        liter: l
+        liters: l
+    ml_per_unit:
+      name: Conversion factors (base unit per 1 of each unit)
+      description: >-
+        Every canonical unit key from the synonym map above needs a
+        matching entry here, expressed in a shared base unit
+        (milliliters by default). To switch base unit or measurement
+        system, change every value consistently.
+      selector:
+        object:
+      default:
+        tsp: 4.92892
+        tbsp: 14.7868
+        oz: 29.5735
+        cup: 236.588
+        pint: 473.176
+        quart: 946.353
+        gallon: 3785.41
+        ml: 1
+        l: 1000
+    unknown_unit_response:
+      name: Response when a unit isn't recognized
+      description: >-
+        Static text only — this response can't reference the specific
+        words that weren't recognized, since Home Assistant doesn't
+        support rendering a template inside an already-rendered input
+        value.
+      selector:
+        text:
+          multiline: false
+      default: "Sorry, I don't recognize one of those units."
+
+triggers:
+  - trigger: conversation
+    command: !input trigger
+
+variables:
+  unit_map: !input unit_map
+  ml_per_unit: !input ml_per_unit
+  unknown_unit_response: !input unknown_unit_response
+
+actions:
+  - variables:
+      amt: "{{ trigger.slots.amount | float }}"
+      from_raw: "{{ trigger.slots.from_unit | lower | trim }}"
+      to_raw: "{{ trigger.slots.to_unit | lower | trim }}"
+      from_key: "{{ unit_map.get(trigger.slots.from_unit | lower | trim) }}"
+      to_key: "{{ unit_map.get(trigger.slots.to_unit | lower | trim) }}"
+  - choose:
+      - conditions: "{{ from_key is none or to_key is none }}"
+        sequence:
+          - set_conversation_response: "{{ unknown_unit_response }}"
+    default:
+      - variables:
+          result: "{{ (amt * ml_per_unit[from_key] / ml_per_unit[to_key]) | round(2) }}"
+      - set_conversation_response: >-
+          {{ amt | int if amt == (amt | int) else amt }} {{ from_raw }} is
+          {{ result | int if result == (result | int) else result }} {{ to_raw }}.
+
+mode: parallel
+max: 5

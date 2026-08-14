@@ -1,0 +1,12 @@
+# OS
+.DS_Store
+Thumbs.db
+
+# Editors
+.vscode/
+.idea/
+*.swp
+
+# Home Assistant local dev, if you ever symlink a test config in here
+.storage/
+secrets.yaml

@@ -1,0 +1,223 @@
+blueprint:
+  domain: automation
+  name: Voice - Date & Time - Local Assist
+  author: Jeremie Weldin
+  description: >-
+    Ask Assist for the date, the time, or both — spoken naturally,
+
+    fully locally, no cloud service or LLM required.
+
+
+    ### Usage
+
+    - what is today / what's the date / what day is it
+
+    - what time is it / what's the time / tell me the time
+
+    - what's the date and time / tell me the date and time
+
+
+    Time is spoken naturally ("it's ten fifteen in the morning",
+
+    "it's noon", "it's midnight") rather than read digit by digit.
+
+
+    ### Holidays
+
+    US holidays are announced alongside the date by default ("It's
+
+    Sunday, April 5th. It's also Easter.") — federal holidays plus a
+
+    few common observances (Valentine's Day, Easter, Halloween).
+
+    Floating holidays and Easter are computed live via the
+
+    Meeus/Jones/Butcher algorithm, so this stays correct every year
+
+    with no manual updates. Turn this off with the toggle below if you
+
+    don't want it, or if you're outside the US and the built-in list
+
+    doesn't apply — the holiday list itself isn't a separate input,
+
+    since making an arbitrary holiday calendar fully configurable
+
+    would need a much bigger input structure than a single object
+
+    selector supports well. If you want a different country's
+
+    holidays, editing the holiday match block directly in this
+
+    blueprint's YAML is the straightforward path.
+  input:
+    date_trigger:
+      name: Date trigger sentences
+      description: >-
+        Sentences that trigger the date response. Avoid punctuation —
+        Assist's sentence matcher can fail to register a whole trigger
+        list if one sentence contains stray punctuation.
+      selector:
+        text:
+          multiline: false
+          multiple: true
+      default:
+        - "what is today"
+        - "whats today"
+        - "whats todays date"
+        - "what is todays date"
+        - "whats the date"
+        - "what is the date"
+        - "what day is it"
+        - "tell me the date"
+        - "tell me todays date"
+    time_trigger:
+      name: Time trigger sentences
+      selector:
+        text:
+          multiline: false
+          multiple: true
+      default:
+        - "what time is it"
+        - "what's the time"
+        - "what is the time"
+        - "do you have the time"
+        - "tell me the time"
+        - "what time is it right now"
+    combined_trigger:
+      name: Date + time trigger sentences
+      selector:
+        text:
+          multiline: false
+          multiple: true
+      default:
+        - "what's the date and time"
+        - "what is the date and time"
+        - "tell me the date and time"
+        - "what day and time is it"
+    announce_holidays:
+      name: Announce US holidays
+      description: >-
+        If on, the date response adds "It's also [holiday]" on
+        recognized US holidays.
+      selector:
+        boolean:
+      default: true
+
+triggers:
+  - id: date
+    trigger: conversation
+    command: !input date_trigger
+  - id: time
+    trigger: conversation
+    command: !input time_trigger
+  - id: both
+    trigger: conversation
+    command: !input combined_trigger
+
+variables:
+  announce_holidays: !input announce_holidays
+
+actions:
+  - variables:
+      y: "{{ now().year }}"
+      m: "{{ now().month }}"
+      d: "{{ now().day }}"
+      weekday: "{{ now().strftime('%A') }}"
+      month_name: "{{ now().strftime('%B') }}"
+      h24: "{{ now().hour }}"
+      minute: "{{ now().minute }}"
+      h12: "{{ now().strftime('%I') | int }}"
+  - variables:
+      suffix: >-
+        {% if d in [1, 21, 31] %}st{% elif d in [2, 22] %}nd{% elif d in [3, 23] %}rd{% else %}th{% endif %}
+      tod: >-
+        {{ 'in the morning' if 5 <= h24 < 12 else 'in the afternoon' if 12 <= h24 < 17 else 'in the evening' if 17 <= h24 < 21 else 'at night' }}
+  - variables:
+      time_text: >-
+        {%- if h24 == 0 and minute == 0 -%}
+        It's midnight.
+        {%- elif h24 == 12 and minute == 0 -%}
+        It's noon.
+        {%- elif minute == 0 -%}
+        It's {{ h12 }} o'clock {{ tod }}.
+        {%- elif minute < 10 -%}
+        It's {{ h12 }} oh {{ minute }} {{ tod }}.
+        {%- else -%}
+        It's {{ h12 }} {{ minute }} {{ tod }}.
+        {%- endif %}
+  - variables:
+      holiday_name: >-
+        {% if not announce_holidays %}
+        {% else %}
+          {% macro nth_weekday(year, month, wd, n) %}
+            {% set first_wd = as_datetime(('%04d-%02d-01') | format(year, month)).weekday() %}
+            {% set offset = (wd - first_wd) % 7 %}
+            {{ 1 + offset + 7 * (n - 1) }}
+          {% endmacro %}
+          {% macro last_weekday(year, month, wd) %}
+            {% if month == 12 %}
+              {% set next_month_first = as_datetime('%04d-01-01' | format(year + 1)) %}
+            {% else %}
+              {% set next_month_first = as_datetime(('%04d-%02d-01') | format(year, month + 1)) %}
+            {% endif %}
+            {% set last_day = (next_month_first - timedelta(days=1)).day %}
+            {% set last_wd = as_datetime(('%04d-%02d-%02d') | format(year, month, last_day)).weekday() %}
+            {{ last_day - ((last_wd - wd) % 7) }}
+          {% endmacro %}
+          {% set a = y % 19 %}
+          {% set b = y // 100 %}
+          {% set c = y % 100 %}
+          {% set db = b // 4 %}
+          {% set eb = b % 4 %}
+          {% set f = (b + 8) // 25 %}
+          {% set g = (b - f + 1) // 3 %}
+          {% set h = (19*a + b - db - g + 15) % 30 %}
+          {% set i = c // 4 %}
+          {% set k = c % 4 %}
+          {% set l = (32 + 2*eb + 2*i - h - k) % 7 %}
+          {% set mm = (a + 11*h + 22*l) // 451 %}
+          {% set easter_month = (h + l - 7*mm + 114) // 31 %}
+          {% set easter_day = ((h + l - 7*mm + 114) % 31) + 1 %}
+          {% set mlk_day = nth_weekday(y, 1, 0, 3) | trim | int %}
+          {% set presidents_day = nth_weekday(y, 2, 0, 3) | trim | int %}
+          {% set memorial_day = last_weekday(y, 5, 0) | trim | int %}
+          {% set labor_day = nth_weekday(y, 9, 0, 1) | trim | int %}
+          {% set columbus_day = nth_weekday(y, 10, 0, 2) | trim | int %}
+          {% set thanksgiving = nth_weekday(y, 11, 3, 4) | trim | int %}
+          {% set holiday = namespace(name='') %}
+          {% if m == 1 and d == 1 %}{% set holiday.name = "New Year's Day" %}
+          {% elif m == 1 and d == mlk_day %}{% set holiday.name = "Martin Luther King Jr. Day" %}
+          {% elif m == 2 and d == 14 %}{% set holiday.name = "Valentine's Day" %}
+          {% elif m == 2 and d == presidents_day %}{% set holiday.name = "Presidents Day" %}
+          {% elif m == easter_month and d == easter_day %}{% set holiday.name = "Easter" %}
+          {% elif m == 5 and d == memorial_day %}{% set holiday.name = "Memorial Day" %}
+          {% elif m == 6 and d == 19 %}{% set holiday.name = "Juneteenth" %}
+          {% elif m == 7 and d == 4 %}{% set holiday.name = "Independence Day" %}
+          {% elif m == 9 and d == labor_day %}{% set holiday.name = "Labor Day" %}
+          {% elif m == 10 and d == columbus_day %}{% set holiday.name = "Columbus Day" %}
+          {% elif m == 10 and d == 31 %}{% set holiday.name = "Halloween" %}
+          {% elif m == 11 and d == 11 %}{% set holiday.name = "Veterans Day" %}
+          {% elif m == 11 and d == thanksgiving %}{% set holiday.name = "Thanksgiving" %}
+          {% elif m == 12 and d == 24 %}{% set holiday.name = "Christmas Eve" %}
+          {% elif m == 12 and d == 25 %}{% set holiday.name = "Christmas Day" %}
+          {% elif m == 12 and d == 31 %}{% set holiday.name = "New Year's Eve" %}
+          {% endif %}
+          {{ holiday.name }}
+        {% endif %}
+  - variables:
+      date_text: >-
+        It's {{ weekday }}, {{ month_name }} {{ d }}{{ suffix }}.
+        {%- if holiday_name | trim %} It's also {{ holiday_name | trim }}.{% endif %}
+  - choose:
+      - conditions: "{{ trigger.id == 'date' }}"
+        sequence:
+          - set_conversation_response: "{{ date_text | trim }}"
+      - conditions: "{{ trigger.id == 'time' }}"
+        sequence:
+          - set_conversation_response: "{{ time_text | trim }}"
+      - conditions: "{{ trigger.id == 'both' }}"
+        sequence:
+          - set_conversation_response: "{{ date_text | trim }} {{ time_text | trim }}"
+
+mode: parallel
+max: 5

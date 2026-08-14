@@ -1,0 +1,155 @@
+blueprint:
+  domain: automation
+  name: Voice - Basic Arithmetic - Local Assist
+  author: Jeremie Weldin
+  description: >-
+    Ask Assist basic math questions fully locally — addition,
+    subtraction, multiplication, and division — with no cloud service
+    or LLM required.
+
+
+    ### Usage
+
+    Default trigger sentences (edit any set below to reword or
+
+    translate):
+
+    - what is {num1} plus {num2}
+
+    - what is {num1} minus {num2}
+
+    - what is {num1} times {num2}
+
+    - what is {num1} divided by {num2}
+
+
+    Numbers are whole numbers only, matched via Assist's built-in
+    numeric
+
+    range slot — works whether your STT engine transcribes the number
+
+    as a digit ("5") or a word ("five").
+
+
+    ### Limitations
+
+    This blueprint matches two-number, single-operation sentences
+
+    only. Sentence-template matching is pattern matching, not a real
+
+    math parser — chained expressions like "5 plus 3 times 2" aren't
+
+    supported and would need order-of-operations logic this approach
+
+    can't provide. If you need a specific chained pattern, add it as
+
+    its own dedicated sentence with its own computed response.
+  input:
+    plus_trigger:
+      name: Addition trigger sentences
+      description: >-
+        Sentences that trigger addition. Keep {0..1000000:num1} and
+        {0..1000000:num2} — these are Assist's numeric-range slots and
+        must stay in this exact {min..max:name} form. Change the
+        surrounding words to reword or translate.
+      selector:
+        text:
+          multiline: false
+          multiple: true
+      default:
+        - "what is {0..1000000:num1} plus {0..1000000:num2}"
+        - "what's {0..1000000:num1} plus {0..1000000:num2}"
+        - "{0..1000000:num1} plus {0..1000000:num2}"
+        - "what is {0..1000000:num1} added to {0..1000000:num2}"
+        - "how much is {0..1000000:num1} plus {0..1000000:num2}"
+    minus_trigger:
+      name: Subtraction trigger sentences
+      description: Same rules as the addition sentences above.
+      selector:
+        text:
+          multiline: false
+          multiple: true
+      default:
+        - "what is {0..1000000:num1} minus {0..1000000:num2}"
+        - "what's {0..1000000:num1} minus {0..1000000:num2}"
+        - "{0..1000000:num1} minus {0..1000000:num2}"
+        - "what is {0..1000000:num1} subtract {0..1000000:num2}"
+        - "how much is {0..1000000:num1} minus {0..1000000:num2}"
+    times_trigger:
+      name: Multiplication trigger sentences
+      description: Same rules as the addition sentences above.
+      selector:
+        text:
+          multiline: false
+          multiple: true
+      default:
+        - "what is {0..1000000:num1} times {0..1000000:num2}"
+        - "what's {0..1000000:num1} times {0..1000000:num2}"
+        - "{0..1000000:num1} times {0..1000000:num2}"
+        - "what is {0..1000000:num1} multiplied by {0..1000000:num2}"
+        - "how much is {0..1000000:num1} times {0..1000000:num2}"
+    divide_trigger:
+      name: Division trigger sentences
+      description: Same rules as the addition sentences above.
+      selector:
+        text:
+          multiline: false
+          multiple: true
+      default:
+        - "what is {0..1000000:num1} divided by {0..1000000:num2}"
+        - "what's {0..1000000:num1} divided by {0..1000000:num2}"
+        - "{0..1000000:num1} divided by {0..1000000:num2}"
+        - "how much is {0..1000000:num1} divided by {0..1000000:num2}"
+    divide_by_zero_response:
+      name: Divide-by-zero response
+      description: Spoken back when someone asks to divide by zero.
+      selector:
+        text:
+          multiline: false
+      default: "You can't divide by zero."
+
+triggers:
+  - id: plus
+    trigger: conversation
+    command: !input plus_trigger
+  - id: minus
+    trigger: conversation
+    command: !input minus_trigger
+  - id: times
+    trigger: conversation
+    command: !input times_trigger
+  - id: divide
+    trigger: conversation
+    command: !input divide_trigger
+
+variables:
+  divide_by_zero_response: !input divide_by_zero_response
+
+actions:
+  - variables:
+      n1: "{{ trigger.slots.num1 | int }}"
+      n2: "{{ trigger.slots.num2 | int }}"
+  - choose:
+      - conditions: "{{ trigger.id == 'plus' }}"
+        sequence:
+          - set_conversation_response: "{{ n1 }} plus {{ n2 }} is {{ n1 + n2 }}."
+      - conditions: "{{ trigger.id == 'minus' }}"
+        sequence:
+          - set_conversation_response: "{{ n1 }} minus {{ n2 }} is {{ n1 - n2 }}."
+      - conditions: "{{ trigger.id == 'times' }}"
+        sequence:
+          - set_conversation_response: "{{ n1 }} times {{ n2 }} is {{ n1 * n2 }}."
+      - conditions: "{{ trigger.id == 'divide' }}"
+        sequence:
+          - if:
+              - condition: template
+                value_template: "{{ n2 == 0 }}"
+            then:
+              - set_conversation_response: "{{ divide_by_zero_response }}"
+            else:
+              - set_conversation_response: >-
+                  {% set result = (n1 / n2) | round(2) %}
+                  {{ n1 }} divided by {{ n2 }} is {{ result | int if result == (result | int) else result }}.
+
+mode: parallel
+max: 5
