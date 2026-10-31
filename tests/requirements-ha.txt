@@ -1,0 +1,5 @@
+# For tests/ha/ only (real Home Assistant core; Linux/WSL, Python 3.13).
+pytest-homeassistant-custom-component
+# Requirements of HA's conversation component (match the HA version above).
+hassil
+home-assistant-intents

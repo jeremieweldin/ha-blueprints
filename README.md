@@ -48,6 +48,33 @@ Meeus/Jones/Butcher algorithm, so this stays correct every year with no
 manual date updates. Holiday announcements can be toggled off entirely
 via an input if you're outside the US or don't want them.
 
+### 🌦️ Weather Extras
+The one piece of weather info you wanted, without the full forecast
+speech — "what's the pressure", "how humid is it", "what's the dew point",
+"when does the sun set", "will it rain tomorrow", "what's the forecast
+this week".
+
+[![Open your Home Assistant instance and show the blueprint import dialog with a specific blueprint pre-filled.](https://my.home-assistant.io/badges/blueprint_import.svg)](https://my.home-assistant.io/redirect/blueprint_import/?blueprint_url=https%3A%2F%2Fraw.githubusercontent.com%2Fjeremieweldin%2Fha-blueprints%2Fmain%2Fautomation%2Fvoice-weather-extras.yaml)
+
+Pick your weather entity and US (inches of mercury, inches of rain) or
+metric (hectopascals, millimeters) units; whatever units the entity
+reports are converted. For providers that don't give a chance of rain
+(Met.no, for example), "will it rain" falls back to the forecast rain
+amount. Every command's sentences are editable inputs.
+
+| Say | Answers |
+|---|---|
+| "what's the pressure" / "barometric pressure" | "The barometric pressure is 29.92 inches of mercury." |
+| "what's the humidity" / "how humid is it" | "The humidity is 45 percent." |
+| "what's the dew point" | "The dew point is 50.4 degrees Fahrenheit." |
+| "when does the sun rise [tomorrow]" / "what time is sunrise" | "The sun rises tomorrow at 7:20 in the morning." |
+| "when does the sun set [tonight\|tomorrow]" / "what time is sunset" | "The sun sets tonight at 6:25 in the evening." |
+| "is it going to rain [today\|tomorrow]" / "chance of rain" | "Yes, there's a 70 percent chance of rain today." |
+| "what's the forecast this week" / "weekly forecast" | "Here's the next 5 days. Today, rain, high of 61, low of 48…" |
+
+This one needs a weather entity that supports daily forecasts — it's the
+only blueprint here that isn't fully self-contained.
+
 ---
 
 ## Requirements
@@ -56,7 +83,8 @@ via an input if you're outside the US or don't want them.
   configured (a conversation agent — this works with the built-in local
   agent, no cloud or LLM subscription needed)
 - No additional integrations, helpers, or entities required — each
-  blueprint is fully self-contained
+  blueprint is fully self-contained (except Weather Extras, which needs a
+  weather entity)
 
 ## Installation
 
@@ -99,6 +127,17 @@ reference implementation across thousands of cases.
 python -m venv .venv && source .venv/bin/activate
 pip install -r tests/requirements.txt
 python -m pytest tests/ -q
+```
+
+The Weather Extras blueprint is tested end to end instead: `tests/ha/`
+loads it into a real Home Assistant core, creates an automation from it,
+and speaks each sentence through Assist's default conversation agent with
+a stand-in weather entity and sun (skipped unless the extra requirements
+are installed; Linux/WSL, Python 3.13):
+
+```bash
+pip install -r tests/requirements-ha.txt
+python -m pytest tests/ha -q
 ```
 
 ## License
