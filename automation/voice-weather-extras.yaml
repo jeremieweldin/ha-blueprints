@@ -19,31 +19,23 @@ blueprint:
 
     - when does the sun set [tonight|tomorrow] / what time is sunset
 
-    - is it going to rain [today|tomorrow] / chance of rain
 
-    - what's the forecast this week
+    For forecasts ("what's the weather tomorrow"), use a full forecast
+    blueprint alongside this one.
 
 
     ### Units
 
-    Pick US (pressure in inches of mercury, rain in inches) or metric
-    (hectopascals and millimeters). Whatever units your weather entity
-    reports in are converted. Temperatures are spoken in the weather
-    entity's own unit.
-
-
-    ### Weather providers
-
-    Works with any weather entity that supports daily forecasts. Providers
-    without a precipitation probability (Met.no, for example) fall back to
-    the forecast rain amount and condition for "will it rain".
+    Pick US (pressure in inches of mercury) or metric (hectopascals).
+    Whatever unit your weather entity reports pressure in is converted.
+    Temperatures are spoken in the weather entity's own unit.
 
 
     Sunrise and sunset come from Home Assistant's built-in `sun.sun`.
   input:
     weather_entity:
       name: Weather entity
-      description: The weather entity to read current conditions and the daily forecast from.
+      description: The weather entity to read current conditions from.
       selector:
         entity:
           domain: weather
@@ -52,19 +44,11 @@ blueprint:
       selector:
         select:
           options:
-            - label: US (inches of mercury, inches of rain)
+            - label: US (inches of mercury)
               value: us
-            - label: Metric (hectopascals, millimeters of rain)
+            - label: Metric (hectopascals)
               value: metric
       default: us
-    forecast_days:
-      name: Days in the weekly forecast
-      selector:
-        number:
-          min: 1
-          max: 7
-          mode: slider
-      default: 5
     pressure_trigger:
       name: Pressure sentences
       description: >-
@@ -124,30 +108,6 @@ blueprint:
         - "what time is sunset [tonight|tomorrow]"
         - "what time does the sun set [today|tonight|tomorrow]"
         - "(what's|what is|whats) [the] sunset [tonight]"
-    rain_trigger:
-      name: Rain sentences
-      description: Include "tomorrow" as an option to let people ask about tomorrow.
-      selector:
-        text:
-          multiline: false
-          multiple: true
-      default:
-        - "is it going to rain [today|tomorrow]"
-        - "will it rain [today|tomorrow]"
-        - "chance of rain [today|tomorrow]"
-        - "(what's|what is|whats) the chance of rain [today|tomorrow]"
-    week_trigger:
-      name: Weekly forecast sentences
-      selector:
-        text:
-          multiline: false
-          multiple: true
-      default:
-        - "(what's|what is|whats) the forecast [for] [this week|this weekend|the week]"
-        - "(what's|what is|whats) the weekly forecast"
-        - "weekly forecast"
-        - "forecast for the week"
-        - "(what's|what is|whats) the forecast"
 
 triggers:
   - id: pressure
@@ -165,17 +125,10 @@ triggers:
   - id: sunset
     trigger: conversation
     command: !input sunset_trigger
-  - id: rain
-    trigger: conversation
-    command: !input rain_trigger
-  - id: week
-    trigger: conversation
-    command: !input week_trigger
 
 variables:
   weather_entity: !input weather_entity
   units: !input units
-  forecast_days: !input forecast_days
 
 actions:
   - choose:
@@ -264,81 +217,6 @@ actions:
               {% set m = t.minute %}
               {% set tod = 'in the morning' if t.hour < 12 else 'in the afternoon' if t.hour < 18 else 'in the evening' %}
               The sun sets {{ day }} at {{ h }}{% if m > 0 %}:{{ '%02d' % m }}{% endif %} {{ tod }}.
-              {% endif %}
-
-      - conditions:
-          - condition: trigger
-            id: rain
-        sequence:
-          - action: weather.get_forecasts
-            target:
-              entity_id: !input weather_entity
-            data:
-              type: daily
-            response_variable: fc
-          # Some providers (Met.no) give no precipitation_probability, only an
-          # amount and a condition, so every forecast field is read with .get().
-          - set_conversation_response: >-
-              {% set is_tomorrow = 'tomorrow' in (trigger.sentence | default('')) | lower %}
-              {% set days = fc.get(weather_entity, {}).get('forecast', []) if fc else [] %}
-              {% set target = (now() + timedelta(days=1 if is_tomorrow else 0)).date() %}
-              {% set ns = namespace(day=none) %}
-              {% for d in days if ns.day is none and (as_datetime(d.datetime) | as_local).date() == target %}
-              {% set ns.day = d %}
-              {% endfor %}
-              {% set day = ns.day %}
-              {% set when = 'tomorrow' if is_tomorrow else 'today' %}
-              {% if day is none %}
-              Sorry, I don't have a forecast right now.
-              {% else %}
-              {% set p = day.get('precipitation_probability') %}
-              {% set u = state_attr(weather_entity, 'precipitation_unit') %}
-              {% set mm = (day.get('precipitation') | float(0)) * {'mm': 1, 'cm': 10, 'in': 25.4}.get(u, 1) %}
-              {% set wet = day.get('condition') in ['rainy', 'pouring', 'lightning-rainy', 'snowy-rainy', 'hail'] %}
-              {% if units == 'metric' %}
-              {% set amount, unit_words, threshold, light = mm, 'millimeters', 2.5, 'under 2 and a half millimeters' %}
-              {% else %}
-              {% set amount, unit_words, threshold, light = mm / 25.4, 'inches', 0.1, 'under a tenth of an inch' %}
-              {% endif %}
-              {% if p is not none %}
-              {% set p = p | int(0) %}
-              {% if p >= 60 %}Yes, there's a {{ p }} percent chance of rain {{ when }}.
-              {% elif p >= 30 %}Maybe - there's a {{ p }} percent chance of rain {{ when }}.
-              {% elif p > 0 %}Unlikely - only a {{ p }} percent chance of rain {{ when }}.
-              {% else %}No rain expected {{ when }}.
-              {% endif %}
-              {% elif amount >= threshold %}Yes, rain is expected {{ when }}, about {{ amount | round(1) }} {{ unit_words }}.
-              {% elif wet or amount > 0 %}Maybe a little - just a light shower {{ when }}, {{ light }}.
-              {% else %}No rain expected {{ when }}.
-              {% endif %}
-              {% endif %}
-
-      - conditions:
-          - condition: trigger
-            id: week
-        sequence:
-          - action: weather.get_forecasts
-            target:
-              entity_id: !input weather_entity
-            data:
-              type: daily
-            response_variable: fc
-          - set_conversation_response: >-
-              {% set days = (fc.get(weather_entity, {}).get('forecast', []) if fc else [])[:forecast_days | int] %}
-              {% set words = {'clear-night': 'clear', 'cloudy': 'cloudy', 'exceptional': 'unusual weather', 'fog': 'foggy',
-                              'hail': 'hail', 'lightning': 'thunderstorms', 'lightning-rainy': 'thunderstorms',
-                              'partlycloudy': 'partly cloudy', 'pouring': 'heavy rain', 'rainy': 'rain', 'snowy': 'snow',
-                              'snowy-rainy': 'sleet', 'sunny': 'sunny', 'windy': 'windy', 'windy-variant': 'windy and cloudy'} %}
-              {% if not days %}
-              Sorry, I don't have a forecast right now.
-              {% else %}
-              Here's the next {{ days | length }} days.
-              {% for d in days %}
-              {% set dt = as_datetime(d.datetime) | as_local %}
-              {% set day = 'Today' if dt.date() == now().date() else 'Tomorrow' if dt.date() == (now() + timedelta(days=1)).date() else dt.strftime('%A') %}
-              {% set p = d.get('precipitation_probability') %}
-              {{ day }}, {{ words.get(d.get('condition'), d.get('condition') or '') }}, high of {{ d.temperature | int }}{% if d.get('templow') is not none %}, low of {{ d.templow | int }}{% endif %}{% if p is not none and p | int(0) >= 30 %}, with a {{ p | int }} percent chance of rain{% endif %}.
-              {% endfor %}
               {% endif %}
 
 mode: parallel
