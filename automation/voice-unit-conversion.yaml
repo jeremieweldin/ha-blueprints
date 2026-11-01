@@ -29,7 +29,9 @@ blueprint:
     to the target with `result = (base - offset) / factor`. The offset is
     what lets temperature (an affine scale, not a simple ratio) share the
     exact same engine as everything else. Conversions between different
-    dimensions (e.g. cups to pounds) are rejected with a clear message.
+    dimensions (e.g. cups to pounds) are rejected with a clear message,
+    except where a word names two units: "ounces" next to a volume is
+    treated as fluid ounces.
 
 
     ### Customizing
@@ -276,6 +278,18 @@ blueprint:
         hour: {dimension: time, factor: 3600}
         day: {dimension: time, factor: 86400}
         week: {dimension: time, factor: 604800}
+    unit_alternates:
+      name: Fallback units when the two units don't match
+      description: >-
+        Some words name two units. "Ounces" is a weight, but in "how many
+        ounces are in 2 cups" it means fluid ounces. When the two units
+        said measure different things, a unit listed here is swapped for
+        its alternate if that makes them match. Keys and values are
+        canonical keys from the unit definitions.
+      selector:
+        object:
+      default:
+        oz: floz
     unknown_unit_response:
       name: Response when a unit isn't recognized
       description: >-
@@ -301,6 +315,7 @@ triggers:
 variables:
   unit_map: !input unit_map
   unit_defs: !input unit_defs
+  unit_alternates: !input unit_alternates
   unknown_unit_response: !input unknown_unit_response
   mismatch_response: !input mismatch_response
 
@@ -311,6 +326,22 @@ actions:
       to_raw: "{{ trigger.slots.to_unit | lower | trim }}"
       from_key: "{{ unit_map.get(trigger.slots.from_unit | lower | trim) }}"
       to_key: "{{ unit_map.get(trigger.slots.to_unit | lower | trim) }}"
+  # "ounces" with a volume means fluid ounces: swap in a unit's alternate
+  # when that makes the two dimensions match.
+  - variables:
+      from_key: >-
+        {%- set alt = unit_alternates.get(from_key) -%}
+        {% if from_key in unit_defs and to_key in unit_defs
+           and unit_defs[from_key].dimension != unit_defs[to_key].dimension
+           and alt in unit_defs
+           and unit_defs[alt].dimension == unit_defs[to_key].dimension %}{{ alt }}{% else %}{{ from_key }}{% endif %}
+  - variables:
+      to_key: >-
+        {%- set alt = unit_alternates.get(to_key) -%}
+        {% if from_key in unit_defs and to_key in unit_defs
+           and unit_defs[from_key].dimension != unit_defs[to_key].dimension
+           and alt in unit_defs
+           and unit_defs[alt].dimension == unit_defs[from_key].dimension %}{{ alt }}{% else %}{{ to_key }}{% endif %}
   - choose:
       - conditions: >-
           {{ from_key is none or to_key is none

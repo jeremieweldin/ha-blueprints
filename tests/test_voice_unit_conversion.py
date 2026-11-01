@@ -37,14 +37,18 @@ def load_blueprint():
     unit_defs = inp["unit_defs"]["default"]
     unknown = inp["unknown_unit_response"]["default"]
     mismatch = inp["mismatch_response"]["default"]
+    alternates = inp["unit_alternates"]["default"]
     # Extract the real template strings from the action's choose/default steps.
-    choose_action = doc["actions"][1]  # dict with 'choose' + 'default'
+    choose_action = next(a for a in doc["actions"] if "choose" in a)
+    alt_from_tmpl = doc["actions"][1]["variables"]["from_key"]
+    alt_to_tmpl = doc["actions"][2]["variables"]["to_key"]
     steps = choose_action["default"]
     base_tmpl = steps[0]["variables"]["base"]
     result_tmpl = steps[1]["variables"]["result"]
     resp_tmpl = steps[2]["set_conversation_response"]
     return dict(triggers=triggers, unit_map=unit_map, unit_defs=unit_defs,
-                unknown=unknown, mismatch=mismatch,
+                unknown=unknown, mismatch=mismatch, alternates=alternates,
+                alt_from_tmpl=alt_from_tmpl, alt_to_tmpl=alt_to_tmpl,
                 base_tmpl=base_tmpl, result_tmpl=result_tmpl, resp_tmpl=resp_tmpl)
 
 BP = load_blueprint()
@@ -174,6 +178,30 @@ def test_cross_dimension_is_detectable():
     assert d["mile"]["dimension"] != d["gallon"]["dimension"]
     # sanity: same-dimension pairs share a dimension
     assert d["cup"]["dimension"] == d["gallon"]["dimension"]
+
+def resolve_keys(from_key, to_key):
+    """Run the blueprint's real alternate-unit steps, in order."""
+    ctx = dict(unit_defs=BP["unit_defs"], unit_alternates=BP["alternates"],
+               from_key=from_key, to_key=to_key)
+    ctx["from_key"] = ENV.from_string(BP["alt_from_tmpl"]).render(**ctx).strip()
+    ctx["to_key"] = ENV.from_string(BP["alt_to_tmpl"]).render(**ctx).strip()
+    return ctx["from_key"], ctx["to_key"]
+
+def test_ounces_with_a_volume_mean_fluid_ounces():
+    assert resolve_keys("cup", "oz") == ("cup", "floz")
+    assert resolve_keys("oz", "ml") == ("floz", "ml")
+    # weight pairs keep plain ounces; true mismatches stay mismatched
+    assert resolve_keys("lb", "oz") == ("lb", "oz")
+    assert resolve_keys("oz", "g") == ("oz", "g")
+    assert resolve_keys("cup", "lb") == ("cup", "lb")
+    assert resolve_keys("mile", "oz") == ("mile", "oz")
+
+def test_how_many_ounces_in_two_cups_end_to_end():
+    amt, fr, to = recognize_slots("how many ounces are in 2 cups")
+    um = BP["unit_map"]
+    fk, tk = resolve_keys(um[fr], um[to])
+    result = blueprint_convert(amt, fk, tk)
+    assert blueprint_response(amt, fr, to, result) == "2 cups is 16 ounces."
 
 def test_ounce_is_weight_fluid_ounce_is_volume():
     um, d = BP["unit_map"], BP["unit_defs"]
