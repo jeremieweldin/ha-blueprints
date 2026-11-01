@@ -52,16 +52,16 @@ via an input if you're outside the US or don't want them.
 ### 🌦️ Weather Extras
 The one piece of weather info you wanted, without the full forecast
 speech — "what's the pressure", "how humid is it", "what's the dew point",
-"when does the sun set".
+"when does the sun set", "will it rain tomorrow", "what's the forecast
+this week".
 
 [![Open your Home Assistant instance and show the blueprint import dialog with a specific blueprint pre-filled.](https://my.home-assistant.io/badges/blueprint_import.svg)](https://my.home-assistant.io/redirect/blueprint_import/?blueprint_url=https%3A%2F%2Fraw.githubusercontent.com%2Fjeremieweldin%2Fha-blueprints%2Fmain%2Fautomation%2Fvoice-weather-extras.yaml)
 
-Pick your weather entity and US (inches of mercury) or metric
-(hectopascals) pressure; whatever unit the entity reports is converted.
-Every command's sentences are editable inputs. Forecasts ("what's the
-weather tomorrow") are left to a full forecast blueprint — an earlier
-version also answered "will it rain" and "what's the forecast this week",
-but those were dropped after they stalled a live install.
+Pick your weather entity and US (inches of mercury, inches of rain) or
+metric (hectopascals, millimeters) units; whatever units the entity
+reports are converted. For providers that don't give a chance of rain
+(Met.no, for example), "will it rain" falls back to the forecast rain
+amount. Every command's sentences are editable inputs.
 
 | Say | Answers |
 |---|---|
@@ -70,9 +70,10 @@ but those were dropped after they stalled a live install.
 | "what's the dew point" | "The dew point is 50.4 degrees Fahrenheit." |
 | "when does the sun rise [tomorrow]" / "what time is sunrise" | "The sun rises tomorrow at 7:20 in the morning." |
 | "when does the sun set [tonight\|tomorrow]" / "what time is sunset" | "The sun sets tonight at 6:25 in the evening." |
+| "is it going to rain [today\|tomorrow]" / "chance of rain" | "Yes, there's a 70 percent chance of rain today." |
+| "what's the forecast this week" / "weekly forecast" | "Here's the next 5 days. Today, rain, high of 61, low of 48…" |
 
-This one needs a weather entity — it's the only blueprint here that isn't
-fully self-contained.
+This one needs a weather entity that supports daily forecasts.
 
 ### 🗓️ Calendar
 What's on your calendars — "what's on the calendar today", "what's
