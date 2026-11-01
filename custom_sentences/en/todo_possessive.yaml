@@ -1,0 +1,20 @@
+# Lets Assist's built-in "add to list" intent understand possessive list
+# names: "add milk to Jayden's list", "put homework on Jonavan's list".
+# Built-in sentences only cover "add milk to Jayden list". The list name
+# can be a to-do entity's name or any of its aliases.
+#
+# Install: copy to /config/custom_sentences/en/, then reload Assist
+# (Developer tools -> Actions -> Conversation: Reload) or restart.
+language: en
+intents:
+  HassListAddItem:
+    data:
+      - sentences:
+          - "add {item} to {name}[']s [to do |todo ]list"
+          - "put {item} on {name}[']s [to do |todo ]list"
+        requires_context:
+          domain: todo
+        response: item_added
+lists:
+  item:
+    wildcard: true
