@@ -5,7 +5,7 @@ scan_voice_commands.py  (v2 — blueprint-aware)
 Scans Home Assistant config for automations with a `conversation`
 trigger and groups their sentences into dashboard sections.
 
-Handles THREE sources:
+Handles FOUR sources:
   1. Package files under /config/packages/*.yaml — automations nested
      under a top-level `automation:` key.
   2. /config/automations.yaml — the UI-managed format, a bare YAML
@@ -16,6 +16,10 @@ Handles THREE sources:
      drives the conversation trigger, and resolves its value from
      either the instance's input overrides or the blueprint's own
      defaults.
+  4. Custom sentence files under /config/custom_sentences/<lang>/*.yaml
+     (e.g. the one the Voice Timers integration writes). Each file is one
+     section, titled from a "# section: Title" comment in its first lines,
+     or else from the file name.
 
 Sections are grouped by automation alias: text before the first
 " - " becomes the section title (e.g. "Voice Timer - Set named timer"
@@ -32,11 +36,12 @@ Outputs JSON to stdout:
 }
 
 USAGE:
-  python3 scan_voice_commands.py [package_dir] [automations_file] [blueprints_dir]
+  python3 scan_voice_commands.py [package_dir] [automations_file] [blueprints_dir] [sentences_dir]
   Defaults:
     package_dir       = /config/packages
     automations_file  = /config/automations.yaml
     blueprints_dir    = /config/blueprints/automation
+    sentences_dir     = /config/custom_sentences
 
 INSTALL:
   Put this file at /config/scripts/scan_voice_commands.py
@@ -46,6 +51,7 @@ INSTALL:
 import sys
 import json
 import glob
+import re
 import datetime
 from pathlib import Path
 
@@ -137,29 +143,30 @@ def extract_conversation_commands(automation, blueprints_dir):
         if not isinstance(blueprint, dict):
             return None
 
-        trig_key = None
+        # A blueprint can have several conversation triggers (e.g. date,
+        # time, and both), each fed by its own input.
+        trig_keys = []
         for trig in get_triggers(blueprint):
             if not isinstance(trig, dict):
                 continue
             ttype = trig.get("trigger") or trig.get("platform")
-            if ttype == "conversation":
-                trig_key = trig.get("command")
-        if not trig_key:
-            return None
+            if ttype == "conversation" and trig.get("command"):
+                trig_keys.append(trig.get("command"))
 
-        # instance override takes priority over blueprint default
-        if trig_key in overrides:
-            val = overrides[trig_key]
-        else:
-            val = find_input_default(
-                (blueprint.get("blueprint") or {}).get("input", {}), trig_key
-            )
-
-        if isinstance(val, list):
-            return [str(v) for v in val]
-        if isinstance(val, str):
-            return [val]
-        return None
+        commands = []
+        for trig_key in trig_keys:
+            # instance override takes priority over blueprint default
+            if trig_key in overrides:
+                val = overrides[trig_key]
+            else:
+                val = find_input_default(
+                    (blueprint.get("blueprint") or {}).get("input", {}), trig_key
+                )
+            if isinstance(val, list):
+                commands.extend(str(v) for v in val)
+            elif isinstance(val, str):
+                commands.append(val)
+        return commands or None
 
     # direct (non-blueprint) automation
     commands = []
@@ -199,14 +206,44 @@ def collect_automations_from_data(data):
     return []
 
 
-def scan(package_dir, automations_file, blueprints_dir):
+def sentence_file_title(path):
+    """"# section: Title" in a file's first lines, else its name."""
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            for _ in range(15):
+                m = re.match(r"\s*#\s*section:\s*(.+)", f.readline(), re.IGNORECASE)
+                if m:
+                    return m.group(1).strip()
+    except OSError:
+        pass
+    return Path(path).stem.replace("_", " ").title()
+
+
+def extract_sentence_file_commands(data):
+    commands = []
+    intents = (data or {}).get("intents") if isinstance(data, dict) else None
+    if not isinstance(intents, dict):
+        return commands
+    for intent in intents.values():
+        for block in (intent or {}).get("data") or []:
+            for sentence in (block or {}).get("sentences") or []:
+                commands.append(str(sentence))
+    return commands
+
+
+def readable(command):
+    """{vt_minutes:minutes} and {0..10000:num1} read better as {minutes}, {num1}."""
+    return re.sub(r"\{[^{}:]+:([^{}]+)\}", r"{\1}", command)
+
+
+def scan(package_dir, automations_file, blueprints_dir, sentences_dir=None):
     sections = {}  # title -> {"source_files": set, "commands": set}
 
     def add(title, source_name, commands):
         bucket = sections.setdefault(title, {"source_files": set(), "commands": set()})
         bucket["source_files"].add(source_name)
         for c in commands:
-            bucket["commands"].add(c)
+            bucket["commands"].add(readable(c))
 
     # 1. package files
     paths = sorted(glob.glob(str(Path(package_dir) / "*.yaml"))) + sorted(
@@ -235,6 +272,13 @@ def scan(package_dir, automations_file, blueprints_dir):
             title = section_title_for(auto.get("alias"), Path(automations_file).stem)
             add(title, Path(automations_file).name, commands)
 
+    # 3. custom sentence files (one section per file)
+    if sentences_dir and Path(sentences_dir).is_dir():
+        for path in sorted(Path(sentences_dir).glob("*/*.y*ml")):
+            commands = extract_sentence_file_commands(load_yaml_safe(path))
+            if commands:
+                add(sentence_file_title(path), path.name, commands)
+
     result_sections = []
     for title in sorted(sections.keys()):
         bucket = sections[title]
@@ -250,8 +294,9 @@ def main():
     package_dir = sys.argv[1] if len(sys.argv) > 1 else "/config/packages"
     automations_file = sys.argv[2] if len(sys.argv) > 2 else "/config/automations.yaml"
     blueprints_dir = sys.argv[3] if len(sys.argv) > 3 else "/config/blueprints/automation"
+    sentences_dir = sys.argv[4] if len(sys.argv) > 4 else "/config/custom_sentences"
 
-    sections = scan(package_dir, automations_file, blueprints_dir)
+    sections = scan(package_dir, automations_file, blueprints_dir, sentences_dir)
     output = {
         "generated_at": datetime.datetime.now().isoformat(timespec="seconds"),
         "sections": sections,
