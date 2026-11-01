@@ -10,3 +10,8 @@ Thumbs.db
 # Home Assistant local dev, if you ever symlink a test config in here
 .storage/
 secrets.yaml
+
+# Python
+__pycache__/
+*.pyc
+.pytest_cache/
