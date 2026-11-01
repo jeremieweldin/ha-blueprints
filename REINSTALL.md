@@ -77,10 +77,27 @@ it, open it in YAML mode and set:
 - `weather_entity: <weather entity>`
 - `trigger` — add `what('s| is) the weather [forecast] on {phrase}` at the
   top of the list, so "on Tuesday" works.
+- `response_forecast` — start with
+  `{% if delta == 0 %}Today{% elif is_next %}Next {{ phrase | capitalize }}{% else %}{{ phrase | capitalize }}{% endif %}, it will be …`
+  so asking for today's weekday says "Today".
+- `response_no_data` —
+  `The forecast only goes about six days out, so I don't have {{ 'next ' if is_next else '' }}{{ phrase | capitalize }} yet.`
 - `response_current` — the pressure sentence uses the entity's raw
   `pressure` attribute converted to inches of mercury (the blueprint's own
   value rounds to "30.0"). Copy the full template from the backup of
   `automations.yaml` (see **Backups** below).
+
+**The blueprint file itself is patched too** (re-importing it undoes this).
+Upstream, asking for today's weekday ("the weather on Sunday", on a Sunday)
+jumps a week ahead, past the end of the forecast. In
+`blueprints/automation/TheFes/1_voice_weather_forecast_local.yaml`:
+
+1. Under `variables:`, before `daily_mapping:`, add
+   `is_next: '{{ ''next'' in (trigger.get(''sentence'', '''') | lower).split() }}'`.
+2. In each weekday's `delta`, change `(7 if N <= now().weekday() else 0)` to
+   `(7 if N < now().weekday() or (N == now().weekday() and is_next) else 0)`.
+3. In the `phrase:` variable, add `| regex_replace(''^(next|this)\s+'', '''')`
+   after `| lower`, so "next Sunday" captured as one phrase still matches.
 
 > **Keep number ranges small.** Any inline range in a sentence trigger, such
 > as `{0..10000:num}`, makes Assist build a spoken-word table for every number
@@ -90,16 +107,11 @@ it, open it in YAML mode and set:
 
 ### Voice Date & Time
 
-Use **either** the [`voice-date-time.yaml`](automation/voice-date-time.yaml)
-blueprint **or** the `packages/voice_date_holiday.yaml` package — not both,
-or "what's the date" matches twice. The original box ran the package (the
-blueprint was imported but had no automation).
-
-### Automations kept in `automations.yaml`
-
-**Voice Time - Speak the time naturally** isn't a blueprint. Copy it from
-the backup `automations.yaml`. It answers "what time is it" with
-"It's 7 oh 5 in the morning" style phrasing.
+Create one automation from
+[`voice-date-time.yaml`](automation/voice-date-time.yaml) with the default
+inputs. It answers the date (with US holidays), the time ("It's 7 oh 5 in
+the morning") and both together. Don't add other date or time sentence
+triggers alongside it, or the same question matches twice.
 
 ## 5. `configuration.yaml`
 
@@ -126,13 +138,9 @@ command_line:
 say" dashboard card. It needs `scan_voice_commands.py` at
 `/config/scripts/`.
 
-Files to copy into `/config` from a backup (not in this repo yet):
-
-| File | What it is |
-|---|---|
-| `scripts/scan_voice_commands.py` | Scanner behind `sensor.voice_commands` |
-| `packages/voice_date_holiday.yaml` | "what's the date" with holidays (see above) |
-| `packages/*.yaml` | Any other voice packages of your own |
+Copy [`tools/scan_voice_commands.py`](tools/scan_voice_commands.py) to
+`/config/scripts/`, and any voice packages of your own to
+`/config/packages/`.
 
 Restart Home Assistant after editing `configuration.yaml`.
 
@@ -142,11 +150,12 @@ In **Assist** (top-right of any dashboard), type these one at a time. Each
 should answer in under a second:
 
 - what's the weather / what's the weather tomorrow / what's the weather on Tuesday
+- what's the weather on <today's weekday> → starts with "Today"
 - what's the pressure / what's the humidity / what's the dew point
 - what time is sunrise / when does the sun set
-- what time is it / what's the date
+- what time is it / what's the date / what's the date and time
 - what is 5 plus 3 divided by 2 times 6 → 14
-- convert 3 pounds to grams
+- convert 3 pounds to grams / how many ounces are in 2 cups → 16
 - set a pizza timer for 10 minutes / how much time is left / cancel the pizza timer
   *(timers make the speakers announce; test during the day)*
 
