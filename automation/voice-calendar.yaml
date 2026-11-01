@@ -1,0 +1,206 @@
+blueprint:
+  domain: automation
+  name: Voice - Calendar - Local Assist
+  author: Jeremie Weldin
+  description: >-
+    Ask Assist what's on your calendars, fully locally — no cloud service
+    or LLM required.
+
+
+    ### Usage
+
+    - what's on the calendar today / what do we have today
+
+    - what's on the calendar tomorrow / what's happening tomorrow
+
+    - what's coming up / what are the upcoming events
+
+
+    Today and tomorrow list every event that day ("On the calendar today:
+    Property at 10 AM and Take Trash Cans Out."). Upcoming groups the next
+    week's events by day ("Coming up. Tomorrow, Fallout 2d20 at 8 PM.
+    Wednesday, Glasses at 10 AM.").
+
+
+    ### Privacy
+
+    Answers are spoken out loud on whichever speaker was asked. Events
+    whose title contains any of the "skip" words are left out.
+  input:
+    calendars:
+      name: Calendars
+      description: Calendars to read events from.
+      selector:
+        entity:
+          domain: calendar
+          multiple: true
+    skip_words:
+      name: Skip events containing
+      description: >-
+        Events whose title contains any of these words (not case-sensitive)
+        are never read out. Leave empty to read everything.
+      default: []
+      selector:
+        text:
+          multiline: false
+          multiple: true
+    upcoming_days:
+      name: Days to look ahead for "coming up"
+      default: 7
+      selector:
+        number:
+          min: 1
+          max: 14
+          mode: box
+    max_events:
+      name: Most events to read out
+      description: Any more are summed up as "and 3 more".
+      default: 8
+      selector:
+        number:
+          min: 1
+          max: 20
+          mode: box
+    today_trigger:
+      name: Today trigger sentences
+      selector:
+        text:
+          multiline: false
+          multiple: true
+      default:
+        - "(what's|what is|whats) on [the|our|my] calendar [for] today"
+        - "(what's|what is|whats) [going] on today"
+        - "(what's|what is|whats) happening today"
+        - "what do (we|I) have [going on] today"
+        - "(do|are) (we|I) have [any] (events|plans) today"
+        - "are there any events today"
+    tomorrow_trigger:
+      name: Tomorrow trigger sentences
+      selector:
+        text:
+          multiline: false
+          multiple: true
+      default:
+        - "(what's|what is|whats) on [the|our|my] calendar [for] tomorrow"
+        - "(what's|what is|whats) [going] on tomorrow"
+        - "(what's|what is|whats) happening tomorrow"
+        - "what do (we|I) have [going on] tomorrow"
+        - "(do|are) (we|I) have [any] (events|plans) tomorrow"
+        - "are there any events tomorrow"
+    upcoming_trigger:
+      name: Coming-up trigger sentences
+      selector:
+        text:
+          multiline: false
+          multiple: true
+      default:
+        - "(what's|what is|whats) coming up [on the calendar]"
+        - "(what's|what is|whats) on [the|our|my] calendar [this week]"
+        - "what are the upcoming events"
+        - "(what's|what is|whats) happening this week"
+        - "are there any upcoming events"
+
+triggers:
+  - id: today
+    trigger: conversation
+    command: !input today_trigger
+  - id: tomorrow
+    trigger: conversation
+    command: !input tomorrow_trigger
+  - id: upcoming
+    trigger: conversation
+    command: !input upcoming_trigger
+
+variables:
+  calendars: !input calendars
+  skip_words: !input skip_words
+  upcoming_days: !input upcoming_days
+  max_events: !input max_events
+
+actions:
+  - variables:
+      day_offset: "{{ 1 if trigger.id == 'tomorrow' else 0 }}"
+      window_start: >-
+        {{ (now() if trigger.id == 'upcoming'
+            else today_at() + timedelta(days=day_offset | int)).isoformat() }}
+      window_end: >-
+        {{ (today_at() + timedelta(days=(upcoming_days | int) if trigger.id == 'upcoming'
+            else (day_offset | int) + 1)).isoformat() }}
+      today_date: "{{ now().date().isoformat() }}"
+      tomorrow_date: "{{ (now() + timedelta(days=1)).date().isoformat() }}"
+  - action: calendar.get_events
+    target:
+      entity_id: "{{ calendars }}"
+    data:
+      start_date_time: "{{ window_start }}"
+      end_date_time: "{{ window_end }}"
+    response_variable: cal
+    continue_on_error: true
+  # One flat list sorted by start: {key, day, summary, time}. All-day events
+  # have no time. "Coming up" leaves out multi-day events already under way.
+  - variables:
+      events: >-
+        {%- set ns = namespace(items=[]) -%}
+        {%- set words = skip_words | map('lower') | list -%}
+        {%- for cal_id in (cal or {}) -%}
+          {%- for e in cal[cal_id].events -%}
+            {%- set title = e.summary | default('') -%}
+            {%- if words | select('in', title | lower) | list | count == 0 -%}
+              {%- if 'T' in e.start -%}
+                {%- set st = e.start | as_datetime | as_local -%}
+                {%- set day = st.date().isoformat() -%}
+                {%- set key = st.strftime('%Y-%m-%d %H:%M') -%}
+                {%- set time = st.strftime('%-I:%M %p') | replace(':00 ', ' ') -%}
+              {%- else -%}
+                {%- set day = e.start -%}
+                {%- set key = e.start ~ ' 00:00' -%}
+                {%- set time = '' -%}
+              {%- endif -%}
+              {%- if trigger.id != 'upcoming' or day >= today_date -%}
+                {%- set ns.items = ns.items + [{'key': key, 'day': day, 'summary': title, 'time': time}] -%}
+              {%- endif -%}
+            {%- endif -%}
+          {%- endfor -%}
+        {%- endfor -%}
+        {{ ns.items | sort(attribute='key') | list | to_json }}
+  - variables:
+      events: "{{ events | from_json if events is string else events }}"
+  - variables:
+      speech: >-
+        {%- macro say(e) -%}{{ e.summary }}{{ ' at ' ~ e.time if e.time }}{%- endmacro -%}
+        {%- macro join_and(items) -%}
+          {%- if items | count <= 1 -%}{{ items | join('') }}
+          {%- elif items | count == 2 -%}{{ items | join(' and ') }}
+          {%- else -%}{{ items[:-1] | join(', ') }}, and {{ items[-1] }}{%- endif -%}
+        {%- endmacro -%}
+        {%- set shown = events[:max_events | int] -%}
+        {%- set more = events | count - shown | count -%}
+        {%- set tail = (' And ' ~ more ~ ' more.') if more > 0 else '' -%}
+        {%- if trigger.id in ['today', 'tomorrow'] -%}
+          {%- if events | count == 0 -%}
+            There's nothing on the calendar {{ trigger.id }}.
+          {%- else -%}
+            {%- set ns = namespace(parts=[]) -%}
+            {%- for e in shown -%}{%- set ns.parts = ns.parts + [say(e)] -%}{%- endfor -%}
+            On the calendar {{ trigger.id }}: {{ join_and(ns.parts) }}.{{ tail }}
+          {%- endif -%}
+        {%- else -%}
+          {%- if events | count == 0 -%}
+            There's nothing on the calendar for the next {{ upcoming_days | int }} days.
+          {%- else -%}
+            {%- set ns = namespace(out=[]) -%}
+            {%- for day, group in shown | groupby('day') -%}
+              {%- set label = 'Later today' if day == today_date
+                  else 'Tomorrow' if day == tomorrow_date
+                  else as_datetime(day).strftime('%A') -%}
+              {%- set dp = namespace(parts=[]) -%}
+              {%- for e in group -%}{%- set dp.parts = dp.parts + [say(e)] -%}{%- endfor -%}
+              {%- set ns.out = ns.out + [label ~ ', ' ~ join_and(dp.parts) ~ '.'] -%}
+            {%- endfor -%}
+            Coming up. {{ ns.out | join(' ') }}{{ tail }}
+          {%- endif -%}
+        {%- endif -%}
+  - set_conversation_response: "{{ speech | trim }}"
+
+mode: parallel
+max: 5
