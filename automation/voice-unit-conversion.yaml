@@ -42,15 +42,17 @@ blueprint:
 
     ### Limitations
 
-    Amounts are whole numbers, 0–100000 (no decimals or negatives, so
-    sub-zero temperatures can't be entered). The {from_unit}/{to_unit}
+    Amounts are whole numbers, 0–10000 (no decimals or negatives, so
+    sub-zero temperatures can't be entered). Keep the range small: Assist
+    builds a spoken-word table for every value in it, and very large
+    ranges use enough memory to crash Home Assistant. The {from_unit}/{to_unit}
     slots capture whatever words were said; anything not in the synonym
     map gets a graceful fallback instead of a silent failure.
   input:
     trigger:
       name: Trigger sentences
       description: >-
-        Use {0..100000:amount} for the number (must stay in this exact
+        Use {0..10000:amount} for the number (must stay in this exact
         {min..max:name} form) and {from_unit}/{to_unit} for the
         unit-name slots.
       selector:
@@ -58,11 +60,11 @@ blueprint:
           multiline: false
           multiple: true
       default:
-        - "how many {to_unit} (are|is) in {0..100000:amount} {from_unit}"
-        - "how many {to_unit} in {0..100000:amount} {from_unit}"
-        - "convert {0..100000:amount} {from_unit} to {to_unit}"
-        - "what is {0..100000:amount} {from_unit} in {to_unit}"
-        - "what's {0..100000:amount} {from_unit} in {to_unit}"
+        - "how many {to_unit} (are|is) in {0..10000:amount} {from_unit}"
+        - "how many {to_unit} in {0..10000:amount} {from_unit}"
+        - "convert {0..10000:amount} {from_unit} to {to_unit}"
+        - "what is {0..10000:amount} {from_unit} in {to_unit}"
+        - "what's {0..10000:amount} {from_unit} in {to_unit}"
     unit_map:
       name: Unit name synonyms
       description: >-

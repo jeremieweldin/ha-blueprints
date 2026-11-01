@@ -11,7 +11,8 @@ blueprint:
     Handles both single operations ("what is 6 times 7") and chained
     expressions with correct order of operations ("what is 5 plus 3
     divided by 2 times 6" → 14). Numbers may be spoken as words ("five")
-    or digits ("5"), anywhere from 0 to 1,000,000.
+    or digits ("5"): the first number from 0 to 10,000, the rest up to
+    1,000,000.
 
 
     ### Usage
@@ -48,13 +49,16 @@ blueprint:
 
     standard order of operations. Numbers are whole numbers only;
 
-    division results are rounded to two decimal places.
+    division results are rounded to two decimal places. The first number
+    is capped at 10,000 because Assist builds a spoken-word table for
+    every value in a {min..max} range — a 0..1,000,000 range costs
+    several GB of memory and can crash Home Assistant.
   input:
     plus_trigger:
       name: Addition trigger sentences
       description: >-
-        Sentences that trigger addition. Keep {0..1000000:num1} and
-        {rest} exactly as written — {0..1000000:num1} is Assist's
+        Sentences that trigger addition. Keep {0..10000:num1} and
+        {rest} exactly as written — {0..10000:num1} is Assist's
         numeric-range slot and {rest} is a wildcard that captures the
         remainder of the expression. Change only the surrounding words
         and the operator words in the (plus|added to) group to reword or
@@ -64,7 +68,7 @@ blueprint:
           multiline: false
           multiple: true
       default:
-        - "[(what is|what's|whats|calculate|compute|how much is|work out) ]{0..1000000:num1} (plus|added to) {rest}"
+        - "[(what is|what's|whats|calculate|compute|how much is|work out) ]{0..10000:num1} (plus|added to) {rest}"
     minus_trigger:
       name: Subtraction trigger sentences
       description: Same rules as the addition sentences above.
@@ -73,7 +77,7 @@ blueprint:
           multiline: false
           multiple: true
       default:
-        - "[(what is|what's|whats|calculate|compute|how much is|work out) ]{0..1000000:num1} (minus|subtract) {rest}"
+        - "[(what is|what's|whats|calculate|compute|how much is|work out) ]{0..10000:num1} (minus|subtract) {rest}"
     times_trigger:
       name: Multiplication trigger sentences
       description: Same rules as the addition sentences above.
@@ -82,7 +86,7 @@ blueprint:
           multiline: false
           multiple: true
       default:
-        - "[(what is|what's|whats|calculate|compute|how much is|work out) ]{0..1000000:num1} (times|multiplied by) {rest}"
+        - "[(what is|what's|whats|calculate|compute|how much is|work out) ]{0..10000:num1} (times|multiplied by) {rest}"
     divide_trigger:
       name: Division trigger sentences
       description: Same rules as the addition sentences above.
@@ -91,7 +95,7 @@ blueprint:
           multiline: false
           multiple: true
       default:
-        - "[(what is|what's|whats|calculate|compute|how much is|work out) ]{0..1000000:num1} (divided by|over) {rest}"
+        - "[(what is|what's|whats|calculate|compute|how much is|work out) ]{0..10000:num1} (divided by|over) {rest}"
     divide_by_zero_response:
       name: Divide-by-zero response
       description: Spoken back when an expression divides by zero.

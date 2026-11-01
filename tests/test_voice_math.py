@@ -187,6 +187,7 @@ def test_randomized():
     for _ in range(N):
         k = random.randint(1, 4)          # 2..5 numbers
         nums = [rand_num() for _ in range(k + 1)]
+        nums[0] = min(nums[0], 10000)     # first number is a 0..10000 range slot
         ops = [random.choice(ops_pool) for _ in range(k)]
         use_words = random.random() < 0.5
 
