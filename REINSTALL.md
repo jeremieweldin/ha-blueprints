@@ -66,6 +66,7 @@ create one automation from it.
 | Voice Math | [`voice-math.yaml`](automation/voice-math.yaml) | defaults |
 | Voice Unit Conversion | [`voice-unit-conversion.yaml`](automation/voice-unit-conversion.yaml) | defaults |
 | Voice Weather - Extras | [`voice-weather-extras.yaml`](automation/voice-weather-extras.yaml) | `<weather entity>`, units `us` |
+| Voice Calendar | [`voice-calendar.yaml`](automation/voice-calendar.yaml) | `<calendar entities>`; optional skip words |
 | Voice Weather - Local Forecast | TheFes [`1_voice_weather_forecast_local.yaml`](https://github.com/TheFes/ha-blueprints/blob/main/weather/1_voice_weather_forecast_local.yaml) | see below |
 
 The weather entity comes from the **Met.no** integration (added
@@ -113,6 +114,20 @@ inputs. It answers the date (with US holidays), the time ("It's 7 oh 5 in
 the morning") and both together. Don't add other date or time sentence
 triggers alongside it, or the same question matches twice.
 
+### Lists and the garage (no automations needed)
+
+These use Assist's built-in commands; they only need the entities exposed
+to Assist (**Settings → Voice assistants → Expose**) and good names.
+
+- **To-do lists:** copy
+  [`custom_sentences/en/todo_possessive.yaml`](custom_sentences/en/todo_possessive.yaml)
+  to `/config/custom_sentences/en/` so "add milk to <name>'s list" works.
+  If voice-to-text keeps mishearing a name, add the misheard spelling as an
+  **alias** on that list's entity.
+- **Garage door:** give the cover entity the aliases `Garage` and
+  `Garage door`, so "is the garage door open" and "close the garage" find it.
+  Note that Assist can also open it by voice once it's exposed.
+
 ## 5. `configuration.yaml`
 
 Add these alongside `default_config:`:
@@ -156,6 +171,8 @@ should answer in under a second:
 - what time is it / what's the date / what's the date and time
 - what is 5 plus 3 divided by 2 times 6 → 14
 - convert 3 pounds to grams / how many ounces are in 2 cups → 16
+- what's on the calendar today / what's coming up
+- add milk to <name>'s list (then delete it from the list)
 - set a pizza timer for 10 minutes / how much time is left / cancel the pizza timer
   *(timers make the speakers announce; test during the day)*
 

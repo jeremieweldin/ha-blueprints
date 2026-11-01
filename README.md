@@ -74,6 +74,25 @@ but those were dropped after they stalled a live install.
 This one needs a weather entity — it's the only blueprint here that isn't
 fully self-contained.
 
+### 🗓️ Calendar
+What's on your calendars — "what's on the calendar today", "what's
+happening tomorrow", "what's coming up".
+
+[![Open your Home Assistant instance and show the blueprint import dialog with a specific blueprint pre-filled.](https://my.home-assistant.io/badges/blueprint_import.svg)](https://my.home-assistant.io/redirect/blueprint_import/?blueprint_url=https%3A%2F%2Fraw.githubusercontent.com%2Fjeremieweldin%2Fha-blueprints%2Fmain%2Fautomation%2Fvoice-calendar.yaml)
+
+Pick one or more calendar entities. Today and tomorrow list each event
+with its start time; "coming up" groups the next week by day. Answers are
+spoken aloud, so a "skip events containing" input keeps private
+appointments out of them.
+
+### 📝 Possessive list names (custom sentences)
+Assist's built-in "add milk to Jayden list" works, but "add milk to
+Jayden's list" doesn't. Copy
+[`custom_sentences/en/todo_possessive.yaml`](custom_sentences/en/todo_possessive.yaml)
+to `/config/custom_sentences/en/` and reload Assist to add "add … to
+[name]'s list" and "put … on [name]'s list" for every to-do list exposed to
+Assist.
+
 ---
 
 ## Requirements
@@ -83,7 +102,7 @@ fully self-contained.
   agent, no cloud or LLM subscription needed)
 - No additional integrations, helpers, or entities required — each
   blueprint is fully self-contained (except Weather Extras, which needs a
-  weather entity)
+  weather entity, and Calendar, which needs a calendar)
 
 ## Installation
 
