@@ -9,8 +9,9 @@ own Home Assistant instance.
 ## Blueprints
 
 ### 🧮 Basic Arithmetic
-Addition, subtraction, multiplication, and division, spoken and answered
-locally — "what is 6 times 7", "20 divided by 4". Handles chained
+Addition, subtraction, multiplication, division, and percentages, spoken
+and answered locally — "what is 6 times 7", "20 divided by 4", "what's
+15 percent of 30". Handles chained
 expressions with correct order of operations too — "what is 5 plus 3
 divided by 2 times 6" answers 14.
 
@@ -19,7 +20,9 @@ divided by 2 times 6" answers 14.
 Whole numbers, spoken as words ("five") or digits ("5"): the first number
 0–10,000, the rest up to 1,000,000.
 Multiplication and division bind before addition and subtraction, then
-left to right; division results are rounded to two decimals. No
+left to right ("percent of" counts as multiplication). Answers are
+rounded to two decimals, and a rounded answer is spoken with "about" —
+"10 divided by 3 is about 3.33". No
 parentheses. Each question must start with a number and an operator, so
 unrelated queries like "what is the weather" are left untouched.
 

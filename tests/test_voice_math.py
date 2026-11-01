@@ -41,6 +41,7 @@ def load_blueprint():
         "-": inp["minus_trigger"]["default"],
         "*": inp["times_trigger"]["default"],
         "/": inp["divide_trigger"]["default"],
+        "%": inp["percent_trigger"]["default"],
     }
     dz = inp["divide_by_zero_response"]["default"]
     err = inp["error_response"]["default"]
@@ -54,20 +55,20 @@ JINJA = Environment().from_string(TEMPLATE_SRC)
 def build_intents():
     intents = {"language": "en",
                "intents": {}, "lists": {"rest": {"wildcard": True}}}
-    names = {"+": "Plus", "-": "Minus", "*": "Times", "/": "Divide"}
+    names = {"+": "Plus", "-": "Minus", "*": "Times", "/": "Divide", "%": "Percent"}
     for sym, sentences in TRIGGERS.items():
         intents["intents"][names[sym]] = {"data": [{"sentences": sentences}]}
     return Intents.from_dict(intents)
 
 INTENTS = build_intents()
-INTENT_OP = {"Plus": "+", "Minus": "-", "Times": "*", "Divide": "/"}
+INTENT_OP = {"Plus": "+", "Minus": "-", "Times": "*", "Divide": "/", "Percent": "%"}
 
 class FakeTrigger:
     def __init__(self, tid, num1, rest):
         self.id = tid
         self.slots = {"num1": num1, "rest": rest}
 
-TID_BY_OP = {"+": "plus", "-": "minus", "*": "times", "/": "divide"}
+TID_BY_OP = {"+": "plus", "-": "minus", "*": "times", "/": "divide", "%": "percent"}
 
 def run(sentence):
     """Full HA pipeline: recognize -> render the real template. Returns spoken str or None."""
@@ -106,6 +107,7 @@ def ref_eval(nums, ops):
     for i, op in enumerate(ops):
         n = nums[i + 1]
         if op == '*': vals[-1] = vals[-1] * n
+        elif op == '%': vals[-1] = vals[-1] * n / 100
         elif op == '/':
             if n == 0: return ('divzero', None)
             vals[-1] = vals[-1] / n
@@ -117,13 +119,14 @@ def ref_eval(nums, ops):
 
 def fmt(x):
     r = round(x, 2)
-    return int(r) if r == int(r) else r
+    shown = int(r) if r == int(r) else r
+    return f"about {shown}" if abs(x - r) > 1e-7 else str(shown)
 
 def expected_answer(nums, ops):
     kind, val = ref_eval(nums, ops)
     if kind == 'divzero':
         return DZ
-    opw = {'+': 'plus', '-': 'minus', '*': 'times', '/': 'divided by'}
+    opw = {'+': 'plus', '-': 'minus', '*': 'times', '/': 'divided by', '%': 'percent of'}
     parts = [str(nums[0])]
     for i in range(len(ops)):
         parts += [opw[ops[i]], str(nums[i + 1])]
@@ -146,6 +149,16 @@ FIXED = [
     ("what's 20 times 4 minus 2", "20 times 4 minus 2 is 78."),
     ("what is one thousand five hundred plus 2", "1500 plus 2 is 1502."),
     ("what is 100 divided by 0", DZ),
+    ("what is 15 percent of 30", "15 percent of 30 is 4.5."),
+    ("what's 20 percent of 80", "20 percent of 80 is 16."),
+    ("what is fifteen percent of two hundred", "15 percent of 200 is 30."),
+    ("what is 10 plus 15 percent of 30", "10 plus 15 percent of 30 is 14.5."),
+    ("what's 15% of 30", "15 percent of 30 is 4.5."),
+    ("what is 10 plus 15% of 30", "10 plus 15 percent of 30 is 14.5."),
+    ("what is 7 percent of 13", "7 percent of 13 is 0.91."),
+    ("what is 15 percent of 30 divided by 7", "15 percent of 30 divided by 7 is about 0.64."),
+    ("what is 10 divided by 3", "10 divided by 3 is about 3.33."),
+    ("what is 17 divided by 3", "17 divided by 3 is about 5.67."),
     ("what is 7 plus 2 divided by 0", DZ),
 ]
 
@@ -170,10 +183,11 @@ def test_non_match():
 
 def test_randomized():
     random.seed(20260814)
-    ops_pool = ['+', '-', '*', '/']
+    ops_pool = ['+', '-', '*', '/', '%']
     prefixes = ["what is ", "what's ", "calculate ", "compute ", "how much is ", "work out ", ""]
     sym_spoken = {'+': ['plus', 'added to'], '-': ['minus', 'subtract'],
-                  '*': ['times', 'multiplied by'], '/': ['divided by', 'over']}
+                  '*': ['times', 'multiplied by'], '/': ['divided by', 'over'],
+                  '%': ['percent of']}
 
     def rand_num():
         r = random.random()
