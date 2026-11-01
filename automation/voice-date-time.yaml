@@ -53,23 +53,20 @@ blueprint:
     date_trigger:
       name: Date trigger sentences
       description: >-
-        Sentences that trigger the date response. Avoid punctuation —
-        Assist's sentence matcher can fail to register a whole trigger
-        list if one sentence contains stray punctuation.
+        Sentences that trigger the date response. Apostrophes are fine
+        inside `(what's|what is)` alternatives or `[']` optionals; other
+        stray punctuation can stop a whole trigger list from registering.
       selector:
         text:
           multiline: false
           multiple: true
       default:
-        - "what is today"
-        - "whats today"
-        - "whats todays date"
-        - "what is todays date"
-        - "whats the date"
-        - "what is the date"
-        - "what day is it"
+        - "(what's|what is|whats) today"
+        - "(what's|what is|whats) today[']s date"
+        - "(what's|what is|whats) the date [today]"
+        - "what day is it [today]"
         - "tell me the date"
-        - "tell me todays date"
+        - "tell me today[']s date"
     time_trigger:
       name: Time trigger sentences
       selector:
@@ -77,12 +74,10 @@ blueprint:
           multiline: false
           multiple: true
       default:
-        - "what time is it"
-        - "what's the time"
-        - "what is the time"
+        - "what time is it [right now]"
+        - "(what's|what is|whats) the time"
         - "do you have the time"
         - "tell me the time"
-        - "what time is it right now"
     combined_trigger:
       name: Date + time trigger sentences
       selector:
@@ -90,8 +85,7 @@ blueprint:
           multiline: false
           multiple: true
       default:
-        - "what's the date and time"
-        - "what is the date and time"
+        - "(what's|what is|whats) the date and time"
         - "tell me the date and time"
         - "what day and time is it"
     announce_holidays:
